@@ -409,7 +409,7 @@ public final class NettyHook {
                 }
                 at += n;
                 n = varInt(at, end);
-                if (n <= 0 || vi < 0 || vi > 765) {
+                if (n <= 0 || vi < 0 || vi > 32767) {
                     return DROP;
                 }
                 at += n + vi + 2;

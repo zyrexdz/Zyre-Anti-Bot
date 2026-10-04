@@ -397,27 +397,35 @@ public final class AntiAfkBot {
             case "1.21": case "1.21.1": return 767;
             case "1.21.2": case "1.21.3": return 768;
             case "1.21.4": return 769;
+            case "26.1": case "1.26.1": return 775;
+            case "26.2": case "1.26.2": return 776;
+            case "26.3": case "1.26.3": return 777;
             default:
-                if (ver.startsWith("1.16")) return 754;
-                if (ver.startsWith("1.12")) return 340;
-                if (ver.startsWith("1.8")) return 47;
-                if (ver.startsWith("1.20")) return 765;
+                if (ver.startsWith("26.2") || ver.startsWith("1.26.2")) return 776;
+                if (ver.startsWith("26.1") || ver.startsWith("1.26.1")) return 775;
+                if (ver.startsWith("26") || ver.startsWith("1.26")) return 776;
                 if (ver.startsWith("1.21")) return 767;
+                if (ver.startsWith("1.20")) return 765;
                 if (ver.startsWith("1.19")) return 762;
                 if (ver.startsWith("1.18")) return 758;
                 if (ver.startsWith("1.17")) return 756;
+                if (ver.startsWith("1.16")) return 754;
                 if (ver.startsWith("1.15")) return 578;
                 if (ver.startsWith("1.14")) return 498;
+                if (ver.startsWith("1.12")) return 340;
+                if (ver.startsWith("1.8")) return 47;
                 return 0;
         }
     }
 
     public static String protocolToVersion(int proto) {
-        if (proto == 754) return "1.16.5";
-        if (proto == 47) return "1.8.x";
-        if (proto == 340) return "1.12.2";
-        if (proto == 765) return "1.20.4";
+        if (proto == 776) return "26.2";
+        if (proto == 775) return "26.1";
         if (proto == 767) return "1.21";
+        if (proto == 765) return "1.20.4";
+        if (proto == 754) return "1.16.5";
+        if (proto == 340) return "1.12.2";
+        if (proto == 47) return "1.8.x";
         return "protocol " + proto;
     }
 
