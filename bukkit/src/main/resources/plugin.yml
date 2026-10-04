@@ -1,0 +1,15 @@
+name: ZAB
+main: dev.zab.bukkit.ZabBukkit
+version: ${project.version}
+api-version: 1.13
+author: Zyre
+description: Zyre Anti Bot - live connection stats and bot blocking
+commands:
+  zab:
+    description: Zyre Anti Bot main command
+    usage: /zab
+    permission: zab.admin
+permissions:
+  zab.admin:
+    description: Use all /zab commands
+    default: op

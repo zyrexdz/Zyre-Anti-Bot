@@ -1,0 +1,5 @@
+name: ZAB
+main: dev.zab.bungee.ZabBungee
+version: ${project.version}
+author: Zyre
+description: Zyre Anti Bot - live connection stats and bot blocking

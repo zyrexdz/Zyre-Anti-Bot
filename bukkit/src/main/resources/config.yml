@@ -1,0 +1,23 @@
+# Zyre Anti Bot (ZAB)
+
+# Connections a single IP can open per second before it gets blacklisted.
+max-connections-per-ip: 6
+# How long a blacklisted IP stays blocked.
+block-minutes: 5
+# Total connections per second that turn on attack mode.
+attack-cps: 40
+# Seconds below attack-cps before attack mode turns off again.
+attack-end-seconds: 10
+# During an attack, players who never joined before get kicked once and must rejoin to get in.
+attack-verify: true
+# Smallest peak that gets announced in chat.
+min-peak: 3
+# Never blocked. Add your proxy / TCPShield / playit IPs here if you use one in front of this server.
+trusted-ips:
+  - 127.0.0.1
+
+# Anti-AFK bot (/zab antiafk). Port 0 = use the server's own port.
+antiafk-port: 0
+antiafk-version: "auto"
+# AuthMe password for ZABAFK. Leave empty if you don't use a login plugin.
+antiafk-password: ""
