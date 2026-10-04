@@ -2,7 +2,13 @@
 
 *Inspired by Sonar Antibot.*
 
-A lightweight, high performance antibot and live connection monitor for BungeeCord, Waterfall, Paper, and Spigot.
+A lightweight, high performance antibot and live connection monitor for **BungeeCord**, **Waterfall**, **Paper**, and **Spigot**.
+
+### Supported Versions & Software
+- **Minecraft Versions**: **1.8.8 – 1.21.x** (all client versions supported)
+- **Server Platforms**: Paper, Purpur, Spigot (1.8.8 to 1.21.x)
+- **Proxy Platforms**: BungeeCord, Waterfall, FlameCord (1.8 to 1.21.x)
+- **Java Runtimes**: Java 8 up to Java 21+
 
 Most antibots choke during real bot attacks because they let thousands of fake connections enter the proxy pipeline, wasting CPU decoding packets for IPs that should already be banned. ZAB hooks straight into Netty's socket acceptor and drops blocked connections on the spot—before your server or proxy even touches them.
 
