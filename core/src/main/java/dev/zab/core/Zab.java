@@ -192,8 +192,6 @@ public final class Zab {
         blocked.add();
     }
 
-    // During an attack, unknown IPs get kicked once and must come back after 1.5-60s.
-    // Bot floods rarely reconnect with the same IP inside that window.
     public boolean needsReconnect(String ip) {
         if (!attack || !attackVerify || verified.contains(ip)) {
             return false;

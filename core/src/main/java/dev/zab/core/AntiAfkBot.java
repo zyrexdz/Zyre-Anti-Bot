@@ -428,11 +428,11 @@ public final class AntiAfkBot {
         else if (protocol <= 316) id = 0x0D;
         else if (protocol <= 340) id = 0x10;
         else if (protocol <= 404) id = 0x12;
-        else if (protocol <= 578) id = 0x12; // 1.15.2
-        else if (protocol <= 754) id = 0x13; // 1.16.5
-        else if (protocol <= 758) id = 0x12; // 1.18.2
-        else if (protocol <= 763) id = 0x15; // 1.20.1
-        else if (protocol <= 765) id = 0x18; // 1.20.4
+        else if (protocol <= 578) id = 0x12;
+        else if (protocol <= 754) id = 0x13;
+        else if (protocol <= 758) id = 0x12;
+        else if (protocol <= 763) id = 0x15;
+        else if (protocol <= 765) id = 0x18;
         else id = 0x1B;
 
         ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -469,7 +469,7 @@ public final class AntiAfkBot {
         if (protocol <= 47) id = 0x01;
         else if (protocol <= 404) id = 0x02;
         else if (protocol <= 758) id = 0x03;
-        else return; // 1.19+ chat command packets are unsupported in this basic bot
+        else return;
 
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         writeString(b, msg);

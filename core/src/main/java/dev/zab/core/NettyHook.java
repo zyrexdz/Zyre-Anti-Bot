@@ -100,10 +100,8 @@ public final class NettyHook {
                 } else if (addr != null) {
                     ip = addr.toString();
                 }
-                // Always call connect(ip) to track raw CPS and IPSEC
                 boolean allowed = zab.connect(ip);
                 if (!allowed) {
-                    // Blacklist is ON and IP is blocked: abort TCP instantly with 0 allocations
                     ch.unsafe().closeForcibly();
                     return;
                 }
@@ -165,7 +163,6 @@ public final class NettyHook {
             }
             ByteBuf buf = (ByteBuf) msg;
 
-            // When blacklist is OFF: let everything in directly without buffering or dropping
             if (!zab.isBlacklistOn()) {
                 if (!done) {
                     inspectNonBlocking(buf);
@@ -177,7 +174,6 @@ public final class NettyHook {
                 return;
             }
 
-            // Blacklist is ON: inspect and block malicious connections
             if (watch) {
                 int at = buf.readerIndex();
                 if (buf.readableBytes() >= 2 && buf.getByte(at) == 9 && buf.getByte(at + 1) == 1) {
@@ -245,7 +241,6 @@ public final class NettyHook {
 
                     zab.handshake();
 
-                    // Skip protocol VarInt
                     int protoBytes = 0;
                     while (protoBytes < 5 && idx < r + len) {
                         byte b = buf.getByte(idx++);
@@ -253,7 +248,6 @@ public final class NettyHook {
                         if ((b & 0x80) == 0) break;
                     }
 
-                    // Skip server address String
                     int strLen = 0, strLenBytes = 0;
                     while (strLenBytes < 5 && idx < r + len) {
                         byte b = buf.getByte(idx++);
@@ -261,9 +255,8 @@ public final class NettyHook {
                         strLenBytes++;
                         if ((b & 0x80) == 0) break;
                     }
-                    idx += strLen + 2; // address string bytes + port short
+                    idx += strLen + 2;
 
-                    // Next state VarInt
                     int nextState = 0, nsBytes = 0;
                     while (nsBytes < 5 && idx < r + len) {
                         byte b = buf.getByte(idx++);
@@ -363,7 +356,6 @@ public final class NettyHook {
             if (len == 0) {
                 return WAIT;
             }
-            // pre-1.7 server list ping
             if (state == 0 && pos == 0 && held.getUnsignedByte(0) == 0xFE && (len == 1 || held.getByte(1) == 0x01)) {
                 zab.ping();
                 return PASS;
@@ -408,7 +400,6 @@ public final class NettyHook {
                     return zab.checks(ip) && zab.needsReconnect(ip) ? RECONNECT : PASS;
                 }
 
-                // handshake: protocol, host, port, next state - must fill the frame exactly
                 if (id != 0) {
                     return DROP;
                 }
@@ -452,7 +443,7 @@ public final class NettyHook {
             for (int i = 0; i < nameLen; i++) {
                 int c = held.getByte(at + i);
                 boolean ok = c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-                        || (i == 0 && (c == '.' || c == '*')); // Floodgate/Geyser name prefixes
+                        || (i == 0 && (c == '.' || c == '*'));
                 if (!ok) {
                     return false;
                 }

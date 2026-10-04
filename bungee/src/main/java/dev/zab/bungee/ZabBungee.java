@@ -103,8 +103,6 @@ public final class ZabBungee extends Plugin implements Listener {
         } else {
             detectBackendVersion();
         }
-
-        // quiet the log spam Bungee prints when the anti-AFK bot sends packets mid-login
         Filter logFilter = record -> {
             String m = record.getMessage();
             Throwable t = record.getThrown();
@@ -210,8 +208,6 @@ public final class ZabBungee extends Plugin implements Listener {
                 p.sendMessage(ChatMessageType.ACTION_BAR, content);
             }
         }
-
-        // boss bars stay on screen, so only resend when the text actually changed
         if (!viewersTop.isEmpty() && !text.equals(lastTop)) {
             lastTop = text;
             for (Map.Entry<UUID, UUID> entry : viewersTop.entrySet()) {
@@ -305,7 +301,7 @@ public final class ZabBungee extends Plugin implements Listener {
                 BossBar add = new BossBar(bar, BAR_ADD);
                 add.setTitle(new TextComponent(TextComponent.fromLegacyText(zab.actionBar())));
                 add.setHealth(1.0f);
-                add.setColor(5); // purple
+                add.setColor(5);
                 add.setDivision(0);
                 p.unsafe().sendPacket(add);
                 viewersTop.put(id, bar);
