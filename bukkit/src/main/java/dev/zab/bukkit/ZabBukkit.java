@@ -18,6 +18,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -40,7 +41,13 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
     private Collection<?> listeners;
     private BukkitTask injector;
     private BiConsumer<Player, String> bar;
-    private final Set<UUID> viewers = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> viewersBottom = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> viewersTop = ConcurrentHashMap.newKeySet();
+    private Object topBossBar;
+    private Method barAddPlayer;
+    private Method barRemovePlayer;
+    private Method barSetTitle;
+    private String lastTop = "";
 
     @Override
     public void onEnable() {
@@ -63,6 +70,7 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
         zab.getAntiAfk().setPassword(getConfig().getString("antiafk-password", ""));
         hook = new NettyHook(zab);
         bar = initActionBar();
+        initBossBar();
 
         String cfgVer = getConfig().getString("antiafk-version", "auto");
         if (cfgVer != null && !cfgVer.trim().isEmpty() && !cfgVer.equalsIgnoreCase("auto")) {
@@ -95,7 +103,14 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
         getServer().getScheduler().cancelTasks(this);
         hook.eject();
         zab.stop();
-        viewers.clear();
+        if (topBossBar != null) {
+            try {
+                topBossBar.getClass().getMethod("removeAll").invoke(topBossBar);
+            } catch (Throwable ignored) {
+            }
+        }
+        viewersBottom.clear();
+        viewersTop.clear();
     }
 
     private void inject() {
@@ -145,24 +160,70 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
     private void refresh() {
         String line;
         while ((line = zab.pollEvent()) != null) {
-            for (Iterator<UUID> it = viewers.iterator(); it.hasNext(); ) {
-                Player p = Bukkit.getPlayer(it.next());
-                if (p == null) {
-                    it.remove();
-                } else {
+            for (UUID id : viewersBottom) {
+                Player p = Bukkit.getPlayer(id);
+                if (p != null) {
+                    p.sendMessage(line);
+                }
+            }
+            for (UUID id : viewersTop) {
+                Player p = Bukkit.getPlayer(id);
+                if (p != null && !viewersBottom.contains(id)) {
                     p.sendMessage(line);
                 }
             }
         }
-        if (viewers.isEmpty()) {
-            return;
-        }
-        String text = zab.actionBar();
-        for (UUID id : viewers) {
-            Player p = Bukkit.getPlayer(id);
-            if (p != null) {
-                bar.accept(p, text);
+        for (Iterator<UUID> it = viewersBottom.iterator(); it.hasNext(); ) {
+            if (Bukkit.getPlayer(it.next()) == null) {
+                it.remove();
             }
+        }
+        for (Iterator<UUID> it = viewersTop.iterator(); it.hasNext(); ) {
+            if (Bukkit.getPlayer(it.next()) == null) {
+                it.remove();
+            }
+        }
+        if (!viewersBottom.isEmpty()) {
+            String text = zab.actionBar();
+            for (UUID id : viewersBottom) {
+                Player p = Bukkit.getPlayer(id);
+                if (p != null) {
+                    bar.accept(p, text);
+                }
+            }
+        }
+        if (!viewersTop.isEmpty() && topBossBar != null) {
+            String text = zab.actionBar();
+            if (!text.equals(lastTop)) {
+                lastTop = text;
+                try {
+                    barSetTitle.invoke(topBossBar, text);
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+    }
+
+    private void initBossBar() {
+        try {
+            Class<?> bossBarClass = Class.forName("org.bukkit.boss.BossBar");
+            Class<?> barColorClass = Class.forName("org.bukkit.boss.BarColor");
+            Class<?> barStyleClass = Class.forName("org.bukkit.boss.BarStyle");
+            Class<?> barFlagClass = Class.forName("org.bukkit.boss.BarFlag");
+            Object color = barColorClass.getField("PURPLE").get(null);
+            Object style = barStyleClass.getField("SOLID").get(null);
+            Object flags = Array.newInstance(barFlagClass, 0);
+            Method create = Bukkit.class.getMethod("createBossBar", String.class, barColorClass, barStyleClass, flags.getClass());
+            topBossBar = create.invoke(null, "", color, style, flags);
+            barAddPlayer = bossBarClass.getMethod("addPlayer", Player.class);
+            barRemovePlayer = bossBarClass.getMethod("removePlayer", Player.class);
+            barSetTitle = bossBarClass.getMethod("setTitle", String.class);
+            Method setProgress = bossBarClass.getMethod("setProgress", double.class);
+            setProgress.invoke(topBossBar, 1.0);
+            Method setVisible = bossBarClass.getMethod("setVisible", boolean.class);
+            setVisible.invoke(topBossBar, true);
+        } catch (Throwable ignored) {
+            topBossBar = null;
         }
     }
 
@@ -174,6 +235,16 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
             return (p, s) -> {
                 try {
                     send.invoke(p.spigot(), actionBar, TextComponent.fromLegacyText(s));
+                } catch (ReflectiveOperationException ignored) {
+                }
+            };
+        } catch (ReflectiveOperationException ignored) {
+        }
+        try {
+            Method sendActionBar = Player.class.getMethod("sendActionBar", String.class);
+            return (p, s) -> {
+                try {
+                    sendActionBar.invoke(p, s);
                 } catch (ReflectiveOperationException ignored) {
                 }
             };
@@ -217,7 +288,14 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
-        viewers.remove(e.getPlayer().getUniqueId());
+        UUID id = e.getPlayer().getUniqueId();
+        viewersBottom.remove(id);
+        if (viewersTop.remove(id) && topBossBar != null) {
+            try {
+                barRemovePlayer.invoke(topBossBar, e.getPlayer());
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @EventHandler
@@ -231,16 +309,45 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length > 0 && args[0].equalsIgnoreCase("verbose")) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Zab.PREFIX + "\u00a7cOnly in-game players can view the action bar counter.");
+                sender.sendMessage(Zab.PREFIX + "\u00a7cOnly in-game players can view the live counter.");
                 return true;
             }
             Player p = (Player) sender;
-            if (viewers.remove(p.getUniqueId())) {
-                p.sendMessage(Zab.PREFIX + "\u00a77You are \u00a7cno longer \u00a77viewing the counter.");
-            } else {
-                viewers.add(p.getUniqueId());
-                p.sendMessage(Zab.PREFIX + "\u00a77You are \u00a7anow \u00a77viewing the counter.");
+            UUID id = p.getUniqueId();
+            boolean top = args.length > 1 && args[1].equalsIgnoreCase("top");
+
+            boolean wasTop = viewersTop.remove(id);
+            if (wasTop && topBossBar != null) {
+                try {
+                    barRemovePlayer.invoke(topBossBar, p);
+                } catch (Throwable ignored) {
+                }
             }
+            boolean wasBottom = viewersBottom.remove(id);
+
+            String msg;
+            if (top && wasTop) {
+                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the top counter.";
+            } else if (top) {
+                if (topBossBar != null) {
+                    try {
+                        barAddPlayer.invoke(topBossBar, p);
+                        barSetTitle.invoke(topBossBar, zab.actionBar());
+                    } catch (Throwable ignored) {
+                    }
+                    viewersTop.add(id);
+                    msg = "\u00a77You are \u00a7anow \u00a77viewing the top counter.";
+                } else {
+                    viewersBottom.add(id);
+                    msg = "\u00a7cTop BossBar requires Minecraft 1.9+. \u00a77Viewing \u00a7adown \u00a77counter instead.";
+                }
+            } else if (wasBottom) {
+                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the down counter.";
+            } else {
+                viewersBottom.add(id);
+                msg = "\u00a77You are \u00a7anow \u00a77viewing the down counter.";
+            }
+            p.sendMessage(Zab.PREFIX + msg);
             return true;
         }
 
