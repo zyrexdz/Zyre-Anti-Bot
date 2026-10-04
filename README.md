@@ -87,6 +87,10 @@ mvn clean package
 
 Jars will be generated in `bungee/target/` and `bukkit/target/`.
 
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
 ---
 
 *If this saved your server from getting lagged out, leave a ⭐ to help others find it!*
