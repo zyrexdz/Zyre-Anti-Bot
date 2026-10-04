@@ -151,20 +151,6 @@ public final class Zab {
     public boolean connect(String ip) {
         cps.add();
 
-        boolean checking = blacklistOn && !trusted.contains(ip);
-
-        // fast reject — skip all tracking for already-blacklisted IPs
-        if (checking) {
-            Long until = blacklist.get(ip);
-            if (until != null) {
-                if (until > System.currentTimeMillis()) {
-                    blocked.add();
-                    return false;
-                }
-                blacklist.remove(ip);
-            }
-        }
-
         long now = System.nanoTime();
         IpRecord rec = ipRecords.compute(ip, (k, v) -> {
             if (v == null) {
@@ -181,9 +167,19 @@ public final class Zab {
             return v;
         });
 
-        if (!checking) {
+        if (!blacklistOn || trusted.contains(ip)) {
             return true;
         }
+
+        Long until = blacklist.get(ip);
+        if (until != null) {
+            if (until > System.currentTimeMillis()) {
+                blocked.add();
+                return false;
+            }
+            blacklist.remove(ip);
+        }
+
         if (rec.count > maxPerIp) {
             punish(ip);
             return false;
