@@ -18,9 +18,9 @@ Most antibots choke during real bot attacks because they let thousands of fake c
 
 ## Quickstart
 
-1. Grab the jar for your server:
-   - **BungeeCord / Waterfall**: `bungee/target/ZAB-Bungee-1.0.0.jar`
-   - **Paper / Spigot**: `bukkit/target/ZAB-Bukkit-1.0.0.jar`
+1. Download the jar for your server from [Releases](https://github.com/zyrexdz/Zyre-Anti-Bot/releases/latest):
+   - **BungeeCord / Waterfall**: `ZAB-Bungee-1.0.0.jar`
+   - **Paper / Spigot**: `ZAB-Bukkit-1.0.0.jar`
 2. Drop it into your `plugins/` folder and restart.
 3. In-game, run `/zab verbose top` for the top BossBar or `/zab verbose down` for the bottom Action Bar.
 
