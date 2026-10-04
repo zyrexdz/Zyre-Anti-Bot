@@ -19,7 +19,7 @@ Most antibots choke during real bot attacks because they let thousands of fake c
 | **Dropping bots** | Sends disconnect packet | Channel close | Instant TCP abort (`closeForcibly`) before channel setup |
 | **CPU on 10k CPS attack** | High (decodes all packets) | Moderate | Minimal (0 allocations for banned IPs) |
 | **Live HUD** | Chat spam or scoreboard | Action bar / BossBar | Real-time BossBar (`/zab verbose top`) or Action Bar (`/zab verbose down`) |
-| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, Handshakes (50ms rolling window) |
+| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, Handshakes, Traffic (50ms rolling window) |
 | **Built-in Bot** | None | None | Virtual Anti-AFK bot with auto protocol negotiation (`/zab antiafk`) |
 
 ## Quickstart

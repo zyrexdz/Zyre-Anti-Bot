@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 public final class NettyHook {
     private static final String ACCEPTOR = "zab-acceptor";
     private static final String PROBE = "zab-probe";
+    private static final String TRAFFIC = "zab-traffic";
     private static final int MAX_BUFFER = 4096;
     private static final int WAIT = 0, PASS = 1, DROP = 2, RECONNECT = 3;
     private static final byte[] RECONNECT_KICK = loginDisconnect("{\"text\":\"\u00a7e\u00a7lZyre Anti Bot\\n\\n"
@@ -33,6 +34,7 @@ public final class NettyHook {
 
     private final Zab zab;
     private final Acceptor acceptor = new Acceptor();
+    private final TrafficCounter trafficCounter = new TrafficCounter();
     private final Set<Channel> hooked = new HashSet<>();
 
     public NettyHook(Zab zab) {
@@ -87,6 +89,17 @@ public final class NettyHook {
     }
 
     @ChannelHandler.Sharable
+    private final class TrafficCounter extends ChannelInboundHandlerAdapter {
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            if (msg instanceof ByteBuf) {
+                zab.traffic(((ByteBuf) msg).readableBytes());
+            }
+            ctx.fireChannelRead(msg);
+        }
+    }
+
+    @ChannelHandler.Sharable
     private final class Acceptor extends ChannelInboundHandlerAdapter {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -105,7 +118,8 @@ public final class NettyHook {
                     ch.unsafe().closeForcibly();
                     return;
                 }
-                ch.pipeline().addFirst(PROBE, new Probe(ip));
+                ch.pipeline().addFirst(TRAFFIC, trafficCounter);
+                ch.pipeline().addLast(PROBE, new Probe(ip));
             }
             ctx.fireChannelRead(msg);
         }
