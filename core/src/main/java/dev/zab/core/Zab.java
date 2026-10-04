@@ -30,28 +30,17 @@ public final class Zab {
     private static final class Rate {
         final AtomicLongArray buckets = new AtomicLongArray(BUCKETS);
         final String label;
-        final boolean smooth;
         volatile int cur;
         volatile long value;
         volatile long peak;
         long announced;
-        private double ewma = -1;
 
         Rate(String label) {
-            this(label, false);
-        }
-
-        Rate(String label, boolean smooth) {
             this.label = label;
-            this.smooth = smooth;
         }
 
         void add() {
             buckets.incrementAndGet(cur);
-        }
-
-        void add(long amount) {
-            buckets.addAndGet(cur, amount);
         }
 
         void slide() {
@@ -62,19 +51,9 @@ public final class Zab {
             for (int i = 0; i < BUCKETS; i++) {
                 sum += buckets.get(i);
             }
-            if (sum > peak) {
-                peak = sum;
-            }
-            if (smooth) {
-                // EWMA with alpha=0.15 — reacts to changes but stays stable
-                if (ewma < 0) {
-                    ewma = sum;
-                } else {
-                    ewma = 0.15 * sum + 0.85 * ewma;
-                }
-                value = Math.round(ewma);
-            } else {
-                value = sum;
+            value = sum;
+            if (value > peak) {
+                peak = value;
             }
         }
     }
@@ -90,9 +69,8 @@ public final class Zab {
     private final Rate logins = new Rate("Logins per second");
     private final Rate pings = new Rate("Pings per second");
     private final Rate handshakes = new Rate("Handshakes per second");
-    private final Rate traffic = new Rate("Traffic per second", true);
     private final Rate blocked = new Rate("Blocked per second");
-    private final Rate[] shown = {cps, ips, logins, pings, handshakes, traffic};
+    private final Rate[] shown = {cps, ips, logins, pings, handshakes};
 
     private final Map<String, IpRecord> ipRecords = new ConcurrentHashMap<>();
     private final Map<String, Long> blacklist = new ConcurrentHashMap<>();
@@ -173,6 +151,20 @@ public final class Zab {
     public boolean connect(String ip) {
         cps.add();
 
+        boolean checking = blacklistOn && !trusted.contains(ip);
+
+        // fast reject — skip all tracking for already-blacklisted IPs
+        if (checking) {
+            Long until = blacklist.get(ip);
+            if (until != null) {
+                if (until > System.currentTimeMillis()) {
+                    blocked.add();
+                    return false;
+                }
+                blacklist.remove(ip);
+            }
+        }
+
         long now = System.nanoTime();
         IpRecord rec = ipRecords.compute(ip, (k, v) -> {
             if (v == null) {
@@ -189,19 +181,9 @@ public final class Zab {
             return v;
         });
 
-        if (!blacklistOn || trusted.contains(ip)) {
+        if (!checking) {
             return true;
         }
-
-        Long until = blacklist.get(ip);
-        if (until != null) {
-            if (until > System.currentTimeMillis()) {
-                blocked.add();
-                return false;
-            }
-            blacklist.remove(ip);
-        }
-
         if (rec.count > maxPerIp) {
             punish(ip);
             return false;
@@ -240,12 +222,6 @@ public final class Zab {
         logins.add();
     }
 
-    public void traffic(long bytes) {
-        if (bytes > 0) {
-            traffic.add(bytes);
-        }
-    }
-
     public void verify(String ip) {
         verified.add(ip);
         blacklist.remove(ip);
@@ -264,7 +240,6 @@ public final class Zab {
             logins.slide();
             pings.slide();
             handshakes.slide();
-            traffic.slide();
             blocked.slide();
 
             if (cps.value >= attackCps) {
@@ -294,15 +269,9 @@ public final class Zab {
 
             for (Rate r : shown) {
                 long peak = r.peak;
-                long min = r == traffic ? 1024L * 1024L : minPeak;
-                if (peak > r.announced && peak >= min) {
-                    if (r == traffic) {
-                        emit("\u00a77" + r.label + " peak: " + colorBytes(r.announced) + fmtBytes(r.announced)
-                                + " \u00a77\u2192 " + colorBytes(peak) + fmtBytes(peak));
-                    } else {
-                        emit("\u00a77" + r.label + " peak: " + color(r.announced) + fmt(r.announced)
-                                + " \u00a77\u2192 " + color(peak) + fmt(peak));
-                    }
+                if (peak > r.announced && peak >= minPeak) {
+                    emit("\u00a77" + r.label + " peak: " + color(r.announced) + fmt(r.announced)
+                            + " \u00a77\u2192 " + color(peak) + fmt(peak));
                     r.announced = peak;
                 }
             }
@@ -332,54 +301,17 @@ public final class Zab {
         return "\u00a77" + name + ": " + color(n) + fmt(n);
     }
 
-    private static String colorBytes(long bytes) {
-        if (bytes < 100L * 1024L) return "\u00a7a";
-        if (bytes < 5L * 1024L * 1024L) return "\u00a7e";
-        if (bytes < 25L * 1024L * 1024L) return "\u00a76";
-        if (bytes < 100L * 1024L * 1024L) return "\u00a7c";
-        return "\u00a74";
-    }
-
-    private static String fmtBytes(long bytes) {
-        if (bytes < 1024) {
-            return bytes + " B";
-        }
-        if (bytes < 1024L * 1024L) {
-            double kb = bytes / 1024.0;
-            if (kb >= 100) return String.format(Locale.US, "%.0f KB", kb);
-            String s = String.format(Locale.US, "%.1f KB", kb);
-            return s.endsWith(".0 KB") ? s.replace(".0 KB", " KB") : s;
-        }
-        if (bytes < 1024L * 1024L * 1024L) {
-            double mb = bytes / (1024.0 * 1024.0);
-            if (mb >= 100) return String.format(Locale.US, "%.0f MB", mb);
-            String s = String.format(Locale.US, "%.1f MB", mb);
-            return s.endsWith(".0 MB") ? s.replace(".0 MB", " MB") : s;
-        }
-        double gb = bytes / (1024.0 * 1024.0 * 1024.0);
-        if (gb >= 100) return String.format(Locale.US, "%.0f GB", gb);
-        String s = String.format(Locale.US, "%.2f GB", gb);
-        if (s.endsWith(".00 GB")) return s.replace(".00 GB", " GB");
-        if (s.endsWith("0 GB")) return s.substring(0, s.length() - 4) + " GB";
-        return s;
-    }
-
-    private static String statBytes(String name, long bytes) {
-        return "\u00a77" + name + ": " + colorBytes(bytes) + fmtBytes(bytes);
-    }
-
     private static String onOff(boolean on) {
         return on ? "\u00a7aon" : "\u00a7coff";
     }
 
     public String actionBar() {
-        StringBuilder sb = new StringBuilder(180).append(PREFIX)
+        StringBuilder sb = new StringBuilder(160).append(PREFIX)
                 .append(stat("CPS", cps.value)).append(" \u00a78\u2022 ")
                 .append(stat("IPSEC", ips.value)).append(" \u00a78\u2022 ")
                 .append(stat("LOGINS", logins.value)).append(" \u00a78\u2022 ")
                 .append(stat("PINGS", pings.value)).append(" \u00a78\u2022 ")
-                .append(stat("HANDSHAKE/S", handshakes.value)).append(" \u00a78\u2022 ")
-                .append(statBytes("TRAFFIC", traffic.value));
+                .append(stat("HANDSHAKE/S", handshakes.value));
         if (attack) {
             sb.append(" \u00a78\u2022 \u00a74\u00a7lATTACK");
         } else if (cps.value == 0 && ips.value == 0) {
@@ -404,13 +336,8 @@ public final class Zab {
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
-                    if (r == traffic) {
-                        lines.add(PREFIX + "\u00a77" + r.label + ": " + colorBytes(r.value) + fmtBytes(r.value)
-                                + " \u00a78(\u00a77peak " + colorBytes(r.peak) + fmtBytes(r.peak) + "\u00a78)");
-                    } else {
-                        lines.add(PREFIX + "\u00a77" + r.label + ": " + color(r.value) + fmt(r.value)
-                                + " \u00a78(\u00a77peak " + color(r.peak) + fmt(r.peak) + "\u00a78)");
-                    }
+                    lines.add(PREFIX + "\u00a77" + r.label + ": " + color(r.value) + fmt(r.value)
+                            + " \u00a78(\u00a77peak " + color(r.peak) + fmt(r.peak) + "\u00a78)");
                 }
                 lines.add(PREFIX + "\u00a77Blacklist: " + onOff(blacklistOn)
                         + " \u00a78| \u00a77Attack: " + (attack ? "\u00a7cyes" : "\u00a7ano")
