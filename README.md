@@ -2,112 +2,82 @@
 
 *Inspired by Sonar Antibot.*
 
-Most Minecraft antibots let malicious traffic register into the pipeline, instantiate packet decoders, and spam proxy worker threads with garbage. **Zyre Anti Bot** intercepts connections at the raw Netty transport layer—instantly aborting blacklisted IPs with zero protocol overhead and zero memory allocation.
+A lightweight, high-performance antibot and live connection monitor for BungeeCord, Waterfall, Paper, and Spigot.
+
+Most antibots choke during real bot attacks because they let thousands of fake connections enter the proxy pipeline, wasting CPU decoding packets for IPs that should already be banned. ZAB hooks straight into Netty's socket acceptor and drops blocked connections on the spot—before your server or proxy even touches them.
 
 ![Demo](demo.gif)
 
-```bash
-git clone https://github.com/your-username/zyre-anti-bot.git && cd zyre-anti-bot && mvn clean package
-```
+## Why ZAB?
 
----
-
-## Comparison
-
-| Feature | Generic Antibots | Sonar Antibot | Zyre Anti Bot (ZAB) |
-| :--- | :--- | :--- | :--- |
-| **Blacklist Drop** | Disconnect packet in pipeline | Netty channel kick | Instant TCP abort (`closeForcibly`) before channel registration |
-| **Inspection Overhead** | Decodes full packet wrappers | Partial packet decode | In-place zero-copy `ByteBuf` byte inspection |
-| **Memory under attack** | High (allocates per session) | Low | Near-zero (banned IPs allocate 0 objects) |
-| **Metrics Calculation** | Lock-heavy / Periodic scans | Rolling counters | Non-blocking `AtomicLongArray` ring buckets (50ms slide) |
-| **Attack Verification** | Captcha maps / falling anvils | Reconnect / ping check | Non-intrusive 1.5s rejoin token + handshake integrity |
-| **Anti-AFK Simulation** | Separate standalone bot tools | None | Built-in auto-negotiating protocol bot (`/zab antiafk`) |
-
----
+| | Standard Antibots | Sonar Antibot | Zyre Anti Bot (ZAB) |
+|---|---|---|---|
+| **Dropping bots** | Sends disconnect packet | Channel close | Instant TCP abort (`closeForcibly`) before channel setup |
+| **CPU on 10k CPS attack** | High (decodes all packets) | Moderate | Minimal (0 allocations for banned IPs) |
+| **Live HUD** | Chat spam or scoreboard | Action bar / BossBar | Real-time BossBar (`/zab verbose top`) or Action Bar (`/zab verbose down`) |
+| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, Handshakes (50ms rolling window) |
+| **Built-in Bot** | None | None | Virtual Anti-AFK bot with auto protocol negotiation (`/zab antiafk`) |
 
 ## Quickstart
 
-1. Drop `ZAB-Bungee-1.0.0.jar` into your BungeeCord/Waterfall `plugins/` folder, or `ZAB-Bukkit-1.0.0.jar` into your Paper/Spigot `plugins/` folder.
-2. Restart your proxy or server to generate `config.yml`.
-3. Join and run `/zab verbose top` or `/zab verbose down` to monitor live traffic.
-
----
+1. Grab the jar for your server:
+   - **BungeeCord / Waterfall**: `bungee/target/ZAB-Bungee-1.0.0.jar`
+   - **Paper / Spigot**: `bukkit/target/ZAB-Bukkit-1.0.0.jar`
+2. Drop it into your `plugins/` folder and restart.
+3. In-game, run `/zab verbose top` for the top BossBar or `/zab verbose down` for the bottom Action Bar.
 
 ## Commands
 
-All commands require the `zab.admin` permission (defaults to OP on Spigot).
+All commands require the `zab.admin` permission (OP by default on Spigot).
 
-| Command | Description |
-| :--- | :--- |
-| `/zab verbose [top\|down]` | Toggle the real-time HUD (BossBar on top or Action Bar on bottom). |
-| `/zab blacklist <on\|off>` | Toggle bot blocking on or off. Metrics stay 100% active either way. |
-| `/zab antiafk [on\|off\|status] [version]` | Toggle or configure the built-in bot to keep the server/proxy awake. |
-| `/zab stats` | Print real-time CPS, IPSEC, logins, pings, handshakes, and all-time peaks. |
-| `/zab reset` | Reset all peak metric counters. |
-| `/zab unblock <ip>` | Manually remove an IP from the temporary blacklist. |
+- `/zab verbose [top|down]` - Toggle the real-time HUD on your screen.
+- `/zab blacklist <on|off>` - Turn bot blocking on or off. Metrics stay completely raw and live either way.
+- `/zab antiafk [on|off|status] [version]` - Keep your server awake with an internal bot named ZABAFK.
+- `/zab stats` - Show current traffic rates and peak records in chat.
+- `/zab reset` - Reset peak traffic records.
+- `/zab unblock <ip>` - Manually unban an IP.
 
----
+## Config
 
-## How it Works
-
-```
-Incoming TCP SYN
-       │
-       ▼
-[Netty Acceptor] ──(IP Blacklisted?)──► YES ──► ch.unsafe().closeForcibly()  (0 allocations)
-       │ NO
-       ▼
- [Probe Handler] ──(Strict L7 Validation)
-       ├─ VarInt overflow / malformed lengths? ──► Punish & Close
-       ├─ HTTP proxy scanning (GET/POST/HEAD)? ──► Punish & Close
-       ├─ Invalid username characters / length? ──► Punish & Close
-       ├─ Under attack & unverified? ────────────► Reconnect Challenge (Rejoin in 1.5s)
-       ▼ Validated
-[Minecraft Pipeline] (Spigot / Bungee normal handling)
-```
-
-1. **TCP-Level Dropping**: When an IP is blacklisted, it is closed before child channel registration completes. BungeeCord and Spigot never see the connection, no logger lines are generated, and zero memory is retained.
-2. **Layer 7 Sanitization**: The probe validates handshake structure, target protocol sanity, and username formatting (`[a-zA-Z0-9_]`, 1-16 chars, Floodgate/Geyser prefixes). Malformed packets immediately punish the sender.
-3. **Attack Mode Reconnect**: When CPS exceeds the threshold, unverified players receive a fast disconnect token asking them to rejoin. Regular bots flood once and move on; genuine players automatically reconnect after 1.5s and are immediately whitelisted into `verified.txt`.
-
----
-
-## Configuration
+Generated automatically in `plugins/ZAB/config.yml`:
 
 ```yaml
-# Connections a single IP can open per second before it gets blacklisted
+# Max connections a single IP can make per second
 max-connections-per-ip: 6
 
-# How long a blacklisted IP stays blocked (in minutes)
+# Ban duration in minutes
 block-minutes: 5
 
-# Total CPS that triggers attack mode
+# CPS threshold that triggers attack mode
 attack-cps: 40
-
-# Seconds below attack-cps before attack mode turns off
 attack-end-seconds: 10
 
-# During attacks, require first-time players to reconnect once to verify
+# During attacks, new players get asked to rejoin once to verify
 attack-verify: true
 
-# Minimum CPS peak to broadcast in chat alerts
+# Minimum traffic peak to announce in chat
 min-peak: 3
 
-# Never blocked (e.g. backend proxy IP, TCPShield, local host)
+# Never block these (add your proxy IP if running on backend Spigot)
 trusted-ips:
   - 127.0.0.1
 
 # Anti-AFK bot settings
 antiafk-port: 0
 antiafk-version: "auto"
-antiafk-password: "" # Set this if your server uses AuthMe
+antiafk-password: "" # Set your AuthMe password here if using a login plugin
 ```
 
----
+## How It Works
+
+- **Zero-Allocation Drop**: When an IP exceeds the rate limit or sends garbage, it gets blacklisted. Future connections from that IP get aborted immediately at the TCP socket layer with `closeForcibly()`. No packet decoding, no logger spam, no memory wasted.
+- **Raw Metrics**: `CPS` and `IPSEC` track every single connection attempt before any blacklist logic runs. You always see the real attack volume hitting your box.
+- **Attack Verification**: When incoming traffic spikes past `attack-cps`, unverified players get disconnected with a rejoin prompt. Real players reconnect and get whitelisted into `verified.txt`; one-shot bot proxies drop off and never come back.
+- **Anti-AFK Bot**: Running on a host that stops your server when empty? `/zab antiafk on` logs in a local client directly over localhost to handle keep-alives, jump, and look around.
 
 ## Building from Source
 
-Requirements: Java 8+ and Apache Maven.
+Requires Java 8+ and Maven.
 
 ```bash
 # Windows
@@ -117,10 +87,8 @@ build.bat
 mvn clean package
 ```
 
-Output jars will be located in:
-- `bungee/target/ZAB-Bungee-1.0.0.jar`
-- `bukkit/target/ZAB-Bukkit-1.0.0.jar`
+Jars will be generated in `bungee/target/` and `bukkit/target/`.
 
 ---
 
-*If this saved your server from bot attacks, leave a ⭐ to help others find it!*
+*If this saved your server from getting lagged out, leave a ⭐ to help others find it!*
