@@ -42,7 +42,7 @@ All commands require the `zab.admin` permission (defaults to OP on Spigot).
 | `/zab verbose [top\|down]` | Toggle the real-time HUD (BossBar on top or Action Bar on bottom). |
 | `/zab blacklist <on\|off>` | Toggle bot blocking on or off. Metrics stay 100% active either way. |
 | `/zab antiafk [on\|off\|status] [version]` | Toggle or configure the built-in bot to keep the server/proxy awake. |
-| `/zab stats` | Print real-time CPS, pings, logins, MOTDs, and all-time peaks. |
+| `/zab stats` | Print real-time CPS, IPSEC, logins, pings, handshakes, and all-time peaks. |
 | `/zab reset` | Reset all peak metric counters. |
 | `/zab unblock <ip>` | Manually remove an IP from the temporary blacklist. |
 

@@ -68,9 +68,9 @@ public final class Zab {
     private final Rate ips = new Rate("IP addresses per second");
     private final Rate logins = new Rate("Logins per second");
     private final Rate pings = new Rate("Pings per second");
-    private final Rate motds = new Rate("MOTDs per second");
+    private final Rate handshakes = new Rate("Handshakes per second");
     private final Rate blocked = new Rate("Blocked per second");
-    private final Rate[] shown = {cps, ips, logins, pings, motds};
+    private final Rate[] shown = {cps, ips, logins, pings, handshakes};
 
     private final Map<String, IpRecord> ipRecords = new ConcurrentHashMap<>();
     private final Map<String, Long> blacklist = new ConcurrentHashMap<>();
@@ -144,21 +144,12 @@ public final class Zab {
         return blacklistOn && !trusted.contains(ip);
     }
 
+    public boolean isBlacklistOn() {
+        return blacklistOn;
+    }
+
     public boolean connect(String ip) {
         cps.add();
-        boolean check = checks(ip);
-
-        // blacklisted IPs are rejected before any per-IP bookkeeping so floods stay cheap
-        if (check) {
-            Long until = blacklist.get(ip);
-            if (until != null) {
-                if (until > System.currentTimeMillis()) {
-                    blocked.add();
-                    return false;
-                }
-                blacklist.remove(ip);
-            }
-        }
 
         long now = System.nanoTime();
         IpRecord rec = ipRecords.compute(ip, (k, v) -> {
@@ -176,7 +167,20 @@ public final class Zab {
             return v;
         });
 
-        if (check && rec.count > maxPerIp) {
+        if (!blacklistOn || trusted.contains(ip)) {
+            return true;
+        }
+
+        Long until = blacklist.get(ip);
+        if (until != null) {
+            if (until > System.currentTimeMillis()) {
+                blocked.add();
+                return false;
+            }
+            blacklist.remove(ip);
+        }
+
+        if (rec.count > maxPerIp) {
             punish(ip);
             return false;
         }
@@ -208,8 +212,8 @@ public final class Zab {
         pings.add();
     }
 
-    public void motd() {
-        motds.add();
+    public void handshake() {
+        handshakes.add();
     }
 
     public void login() {
@@ -233,7 +237,7 @@ public final class Zab {
             ips.slide();
             logins.slide();
             pings.slide();
-            motds.slide();
+            handshakes.slide();
             blocked.slide();
 
             if (cps.value >= attackCps) {
@@ -303,12 +307,9 @@ public final class Zab {
         StringBuilder sb = new StringBuilder(160).append(PREFIX)
                 .append(stat("CPS", cps.value)).append(" \u00a78\u2022 ")
                 .append(stat("IPSEC", ips.value)).append(" \u00a78\u2022 ")
-                .append(stat("PINGS", pings.value)).append(" \u00a78\u2022 ")
                 .append(stat("LOGINS", logins.value)).append(" \u00a78\u2022 ")
-                .append(stat("MOTD/S", motds.value));
-        if (blocked.value > 0) {
-            sb.append(" \u00a78\u2022 ").append(stat("BLOCKED", blocked.value));
-        }
+                .append(stat("PINGS", pings.value)).append(" \u00a78\u2022 ")
+                .append(stat("HANDSHAKE/S", handshakes.value));
         if (attack) {
             sb.append(" \u00a78\u2022 \u00a74\u00a7lATTACK");
         } else if (cps.value == 0 && ips.value == 0) {

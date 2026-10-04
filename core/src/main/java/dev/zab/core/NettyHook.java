@@ -100,8 +100,10 @@ public final class NettyHook {
                 } else if (addr != null) {
                     ip = addr.toString();
                 }
-                if (!zab.connect(ip)) {
-                    // child is not registered yet, so this costs no event loop work, pipeline setup or proxy logs
+                // Always call connect(ip) to track raw CPS and IPSEC
+                boolean allowed = zab.connect(ip);
+                if (!allowed) {
+                    // Blacklist is ON and IP is blocked: abort TCP instantly with 0 allocations
                     ch.unsafe().closeForcibly();
                     return;
                 }
@@ -111,8 +113,6 @@ public final class NettyHook {
         }
     }
 
-    // Holds the first bytes of a connection until the handshake (and login start) are validated,
-    // so the proxy never sees junk traffic or bots that fail a check.
     private final class Probe extends ChannelInboundHandlerAdapter {
         private final String ip;
         private CompositeByteBuf held;
@@ -121,6 +121,7 @@ public final class NettyHook {
         private int state;
         private int vi;
         private boolean watch;
+        private boolean done;
 
         Probe(String ip) {
             this.ip = ip;
@@ -128,13 +129,15 @@ public final class NettyHook {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
-            timeout = ctx.executor().schedule(() -> {
-                if (zab.checks(ip)) {
-                    ctx.close();
-                } else {
-                    pass(ctx);
-                }
-            }, 5, TimeUnit.SECONDS);
+            if (zab.isBlacklistOn() && zab.checks(ip)) {
+                timeout = ctx.executor().schedule(() -> {
+                    if (zab.isBlacklistOn() && zab.checks(ip)) {
+                        ctx.close();
+                    } else {
+                        pass(ctx);
+                    }
+                }, 5, TimeUnit.SECONDS);
+            }
             ctx.fireChannelActive();
         }
 
@@ -161,8 +164,21 @@ public final class NettyHook {
                 return;
             }
             ByteBuf buf = (ByteBuf) msg;
+
+            // When blacklist is OFF: let everything in directly without buffering or dropping
+            if (!zab.isBlacklistOn()) {
+                if (!done) {
+                    inspectNonBlocking(buf);
+                    if (done) {
+                        ctx.pipeline().remove(this);
+                    }
+                }
+                ctx.fireChannelRead(buf);
+                return;
+            }
+
+            // Blacklist is ON: inspect and block malicious connections
             if (watch) {
-                // status ping: length 9, id 0x01, 8 byte payload
                 int at = buf.readerIndex();
                 if (buf.readableBytes() >= 2 && buf.getByte(at) == 9 && buf.getByte(at + 1) == 1) {
                     zab.ping();
@@ -190,6 +206,125 @@ public final class NettyHook {
                 ctx.writeAndFlush(Unpooled.wrappedBuffer(RECONNECT_KICK)).addListener(ChannelFutureListener.CLOSE);
             } else if (verdict == PASS) {
                 pass(ctx);
+            }
+        }
+
+        private void inspectNonBlocking(ByteBuf buf) {
+            try {
+                int r = buf.readerIndex();
+                int len = buf.readableBytes();
+                if (len <= 0) return;
+
+                if (state == 0) {
+                    if (buf.getUnsignedByte(r) == 0xFE) {
+                        zab.ping();
+                        done = true;
+                        return;
+                    }
+                    int idx = r;
+                    int pktLen = 0, bytes = 0;
+                    while (bytes < 5 && idx < r + len) {
+                        byte b = buf.getByte(idx++);
+                        pktLen |= (b & 0x7F) << (bytes * 7);
+                        bytes++;
+                        if ((b & 0x80) == 0) break;
+                    }
+                    if (bytes == 0 || bytes > 5) return;
+
+                    int id = 0, idBytes = 0;
+                    while (idBytes < 5 && idx < r + len) {
+                        byte b = buf.getByte(idx++);
+                        id |= (b & 0x7F) << (idBytes * 7);
+                        idBytes++;
+                        if ((b & 0x80) == 0) break;
+                    }
+                    if (id != 0) {
+                        done = true;
+                        return;
+                    }
+
+                    zab.handshake();
+
+                    // Skip protocol VarInt
+                    int protoBytes = 0;
+                    while (protoBytes < 5 && idx < r + len) {
+                        byte b = buf.getByte(idx++);
+                        protoBytes++;
+                        if ((b & 0x80) == 0) break;
+                    }
+
+                    // Skip server address String
+                    int strLen = 0, strLenBytes = 0;
+                    while (strLenBytes < 5 && idx < r + len) {
+                        byte b = buf.getByte(idx++);
+                        strLen |= (b & 0x7F) << (strLenBytes * 7);
+                        strLenBytes++;
+                        if ((b & 0x80) == 0) break;
+                    }
+                    idx += strLen + 2; // address string bytes + port short
+
+                    // Next state VarInt
+                    int nextState = 0, nsBytes = 0;
+                    while (nsBytes < 5 && idx < r + len) {
+                        byte b = buf.getByte(idx++);
+                        nextState |= (b & 0x7F) << (nsBytes * 7);
+                        nsBytes++;
+                        if ((b & 0x80) == 0) break;
+                    }
+                    if (nextState == 1) {
+                        state = 1;
+                    } else if (nextState == 2 || nextState == 3) {
+                        state = 2;
+                    } else {
+                        done = true;
+                        return;
+                    }
+
+                    int nextPkt = r + bytes + pktLen;
+                    if (nextPkt < r + len) {
+                        inspectSecondPacket(buf, nextPkt, r + len);
+                    }
+                    return;
+                }
+
+                if (state == 1 || state == 2) {
+                    inspectSecondPacket(buf, r, r + len);
+                }
+            } catch (Exception ignored) {
+                done = true;
+            }
+        }
+
+        private void inspectSecondPacket(ByteBuf buf, int start, int limit) {
+            if (start >= limit) return;
+            int idx = start;
+            int pktLen = 0, bytes = 0;
+            while (bytes < 5 && idx < limit) {
+                byte b = buf.getByte(idx++);
+                pktLen |= (b & 0x7F) << (bytes * 7);
+                bytes++;
+                if ((b & 0x80) == 0) break;
+            }
+            if (bytes == 0 || bytes > 5) return;
+
+            int id = 0, idBytes = 0;
+            while (idBytes < 5 && idx < limit) {
+                byte b = buf.getByte(idx++);
+                id |= (b & 0x7F) << (idBytes * 7);
+                idBytes++;
+                if ((b & 0x80) == 0) break;
+            }
+
+            if (state == 2) {
+                if (id == 0) {
+                    zab.login();
+                }
+                done = true;
+            } else if (state == 1) {
+                if (id == 1) {
+                    zab.ping();
+                    done = true;
+                }
             }
         }
 
@@ -231,7 +366,6 @@ public final class NettyHook {
             // pre-1.7 server list ping
             if (state == 0 && pos == 0 && held.getUnsignedByte(0) == 0xFE && (len == 1 || held.getByte(1) == 0x01)) {
                 zab.ping();
-                zab.motd();
                 return PASS;
             }
             while (true) {
@@ -257,7 +391,6 @@ public final class NettyHook {
 
                 if (state == 1) {
                     if (id == 0) {
-                        zab.motd();
                         watch = true;
                         return PASS;
                     }
@@ -295,8 +428,10 @@ public final class NettyHook {
                 }
                 if (vi == 1) {
                     state = 1;
+                    zab.handshake();
                 } else if (vi == 2 || vi == 3) {
                     state = 2;
+                    zab.handshake();
                 } else {
                     return DROP;
                 }
