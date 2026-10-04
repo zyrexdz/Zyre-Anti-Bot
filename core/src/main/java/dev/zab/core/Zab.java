@@ -30,13 +30,20 @@ public final class Zab {
     private static final class Rate {
         final AtomicLongArray buckets = new AtomicLongArray(BUCKETS);
         final String label;
+        final boolean smooth;
         volatile int cur;
         volatile long value;
         volatile long peak;
         long announced;
+        private double ewma = -1;
 
         Rate(String label) {
+            this(label, false);
+        }
+
+        Rate(String label, boolean smooth) {
             this.label = label;
+            this.smooth = smooth;
         }
 
         void add() {
@@ -55,9 +62,19 @@ public final class Zab {
             for (int i = 0; i < BUCKETS; i++) {
                 sum += buckets.get(i);
             }
-            value = sum;
-            if (value > peak) {
-                peak = value;
+            if (sum > peak) {
+                peak = sum;
+            }
+            if (smooth) {
+                // EWMA with alpha=0.15 — reacts to changes but stays stable
+                if (ewma < 0) {
+                    ewma = sum;
+                } else {
+                    ewma = 0.15 * sum + 0.85 * ewma;
+                }
+                value = Math.round(ewma);
+            } else {
+                value = sum;
             }
         }
     }
@@ -73,7 +90,7 @@ public final class Zab {
     private final Rate logins = new Rate("Logins per second");
     private final Rate pings = new Rate("Pings per second");
     private final Rate handshakes = new Rate("Handshakes per second");
-    private final Rate traffic = new Rate("Traffic per second");
+    private final Rate traffic = new Rate("Traffic per second", true);
     private final Rate blocked = new Rate("Blocked per second");
     private final Rate[] shown = {cps, ips, logins, pings, handshakes, traffic};
 
