@@ -108,7 +108,7 @@ public final class NettyHook {
                 }
                 boolean allowed = zab.connect(ip);
                 if (!allowed) {
-                    if (zab.isBarely()) {
+                    if (zab.isBarely() || zab.isPeak()) {
                         ch.pipeline().addLast(PROBE, new Probe(ip, true));
                     } else {
                         ch.unsafe().closeForcibly();
