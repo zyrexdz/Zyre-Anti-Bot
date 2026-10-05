@@ -27,7 +27,7 @@ public final class Zab {
     private static final int BUCKETS = 20;
     private static final long SECOND = 1_000_000_000L;
     private static final long BUCKET_NANOS = 50_000_000L;
-    private static final List<String> SUBCOMMANDS = Arrays.asList("verbose", "antiafk", "blacklist", "barely", "stats", "reset", "unblock");
+    private static final List<String> SUBCOMMANDS = Arrays.asList("verbose", "antiafk", "blacklist", "barely", "smooth", "stats", "reset", "unblock");
 
     private static final int C_CPS = 0, C_IPS = 1, C_LOGINS = 2, C_PINGS = 3, C_HANDSHAKES = 4, C_BLOCKED = 5, C_BYTES = 6, C_MOTDS = 7;
     private static final int NUM_COUNTERS = 8;
@@ -64,8 +64,19 @@ public final class Zab {
             this.label = label;
         }
 
-        void slide(int steps) {
+        void slide(int steps, boolean smooth) {
             if (steps <= 0) return;
+            if (!smooth) {
+                int next = (cur + 1) % BUCKETS;
+                buckets[next] = pending;
+                pending = 0;
+                cur = next;
+                long sum = 0;
+                for (int i = 0; i < BUCKETS; i++) sum += buckets[i];
+                value = sum;
+                if (value > peak) peak = value;
+                return;
+            }
             if (steps >= BUCKETS) {
                 long perBucket = pending / steps;
                 long remainder = pending % steps;
@@ -142,6 +153,7 @@ public final class Zab {
     private volatile boolean attack;
     private volatile boolean blacklistOn = true;
     private volatile boolean barelyMode = false;
+    private volatile boolean smoothMode = false;
     private long attackUntil;
     private int ticks;
 
@@ -260,6 +272,14 @@ public final class Zab {
         if (barely) {
             this.blacklistOn = true;
         }
+    }
+
+    public boolean isSmooth() {
+        return smoothMode;
+    }
+
+    public void setSmooth(boolean smooth) {
+        this.smoothMode = smooth;
     }
 
     public boolean connect(String ip) {
@@ -420,7 +440,7 @@ public final class Zab {
                 tc.drained[C_BYTES] = curBytes;
             }
 
-            for (Rate r : all) r.slide(steps);
+            for (Rate r : all) r.slide(steps, smoothMode);
 
             if (cps.value >= attackCps) {
                 attackUntil = now + attackEnd;
@@ -527,37 +547,62 @@ public final class Zab {
         String arg = args.length < 2 ? "" : args[1].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "blacklist":
-                if (!arg.equals("on") && !arg.equals("off") && !arg.equals("barely")) {
-                    String cur = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : "\u00a7aon");
+                if (!arg.equals("on") && !arg.equals("off") && !arg.equals("barely") && !arg.equals("smooth") && !arg.equals("accurate")) {
+                    String cur = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (smoothMode ? "\u00a7bsmooth" : "\u00a7aon"));
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is currently " + cur
-                            + "\u00a77. Use \u00a7f/zab blacklist <on|off|barely>");
+                            + "\u00a77. Use \u00a7f/zab blacklist <on|off|barely|smooth>");
+                }
+                if (arg.equals("smooth") || arg.equals("accurate")) {
+                    blacklistOn = true;
+                    barelyMode = false;
+                    smoothMode = true;
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7bsmooth\u00a77. Distributing lag bursts across elapsed time to eliminate 1-ms spikes.");
                 }
                 if (arg.equals("barely")) {
                     blacklistOn = true;
                     barelyMode = true;
+                    smoothMode = false;
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings.");
                 }
                 if (arg.equals("on")) {
                     blacklistOn = true;
                     barelyMode = false;
-                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7aon\u00a77. Dropping bad connections instantly at accept for maximum CPS.");
+                    smoothMode = false;
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7aon\u00a77. Standard high-burst mode (raw peak CPS).");
                 }
                 blacklistOn = false;
                 barelyMode = false;
+                smoothMode = false;
                 return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7coff\u00a77. Connections will not be blocked.");
             case "barely":
                 if (arg.equals("on")) {
                     blacklistOn = true;
                     barelyMode = true;
+                    smoothMode = false;
                 } else if (arg.equals("off")) {
                     barelyMode = false;
                 } else {
                     barelyMode = !barelyMode;
-                    if (barelyMode) blacklistOn = true;
+                    if (barelyMode) {
+                        blacklistOn = true;
+                        smoothMode = false;
+                    }
                 }
                 return Collections.singletonList(PREFIX + (barelyMode
                         ? "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings."
                         : "\u00a77Blacklist is now \u00a7aon\u00a77. Dropping bad connections instantly at accept for maximum CPS."));
+            case "smooth":
+            case "accurate":
+                if (arg.equals("on")) {
+                    smoothMode = true;
+                } else if (arg.equals("off")) {
+                    smoothMode = false;
+                } else {
+                    smoothMode = !smoothMode;
+                }
+                return Collections.singletonList(PREFIX + (smoothMode
+                        ? "\u00a77Smooth mode is now \u00a7aon\u00a77. Distributing lag bursts across elapsed time."
+                        : "\u00a77Smooth mode is now \u00a7coff\u00a77. Standard high-burst mode (raw peak CPS)."));
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
@@ -567,7 +612,7 @@ public final class Zab {
                 lines.add(PREFIX + "\u00a77Blocked/s: " + color(blocked.value) + fmt(blocked.value)
                         + " \u00a78(\u00a77peak " + color(blocked.peak) + fmt(blocked.peak) + "\u00a78)");
                 lines.add(PREFIX + "\u00a77Bytes/s: " + color(bytes.value) + fmt(bytes.value));
-                String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : "\u00a7aon");
+                String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (smoothMode ? "\u00a7bsmooth" : "\u00a7aon"));
                 lines.add(PREFIX + "\u00a77Blacklist: " + bl
                         + " \u00a78| \u00a77Attack: " + (attack ? "\u00a7cyes" : "\u00a7ano")
                         + " \u00a78| \u00a77Blocked IPs: \u00a7f" + blacklist.size()
@@ -620,7 +665,7 @@ public final class Zab {
                 return Arrays.asList(
                         PREFIX + "\u00a7f/zab verbose [top|down] \u00a78- \u00a77toggle the live counter",
                         PREFIX + "\u00a7f/zab antiafk [on|off|status] [version] \u00a78- \u00a77keep server online with ZABAFK bot",
-                        PREFIX + "\u00a7f/zab blacklist <on|off|barely> \u00a78- \u00a77toggle bot blocking (barely: probe packet metrics)",
+                        PREFIX + "\u00a7f/zab blacklist <on|off|barely|smooth> \u00a78- \u00a77toggle bot blocking (smooth: lag burst smoothing, on: raw peak CPS)",
                         PREFIX + "\u00a7f/zab stats \u00a78- \u00a77view current rates and peaks",
                         PREFIX + "\u00a7f/zab reset \u00a78- \u00a77reset all peak records",
                         PREFIX + "\u00a7f/zab unblock <ip> \u00a78- \u00a77unblock an IP address");
@@ -632,8 +677,8 @@ public final class Zab {
         if (args.length == 1) {
             options = SUBCOMMANDS;
         } else if (args.length == 2 && args[0].equalsIgnoreCase("blacklist")) {
-            options = Arrays.asList("on", "off", "barely");
-        } else if (args.length == 2 && args[0].equalsIgnoreCase("barely")) {
+            options = Arrays.asList("on", "off", "barely", "smooth");
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("barely") || args[0].equalsIgnoreCase("smooth"))) {
             options = Arrays.asList("on", "off");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("antiafk")) {
             options = Arrays.asList("on", "off", "status", "1.16.5", "1.20.4", "1.8.8");
