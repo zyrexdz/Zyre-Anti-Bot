@@ -137,19 +137,53 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
     private Collection<?> findListeners() throws ReflectiveOperationException {
         Object craft = getServer();
         Object nms = craft.getClass().getMethod("getServer").invoke(craft);
-        for (Class<?> c = nms.getClass(); c != null; c = c.getSuperclass()) {
-            for (Field f : c.getDeclaredFields()) {
-                if (!f.getType().getSimpleName().startsWith("ServerConnection")) {
-                    continue;
+        Object conn = null;
+
+        for (Method m : nms.getClass().getMethods()) {
+            if (m.getParameterCount() == 0 && m.getReturnType().getSimpleName().startsWith("ServerConnection")) {
+                try {
+                    m.setAccessible(true);
+                    conn = m.invoke(nms);
+                    if (conn != null) break;
+                } catch (Throwable ignored) {
                 }
-                f.setAccessible(true);
-                Object conn = f.get(nms);
-                for (Class<?> k = conn == null ? null : conn.getClass(); k != null; k = k.getSuperclass()) {
-                    for (Field g : k.getDeclaredFields()) {
-                        if (List.class.isAssignableFrom(g.getType()) && g.getGenericType() instanceof ParameterizedType
+            }
+        }
+
+        if (conn == null) {
+            for (Class<?> c = nms.getClass(); c != null; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (f.getType().getSimpleName().startsWith("ServerConnection")) {
+                        f.setAccessible(true);
+                        conn = f.get(nms);
+                        if (conn != null) break;
+                    }
+                }
+                if (conn != null) break;
+            }
+        }
+
+        if (conn == null) {
+            return null;
+        }
+
+        for (Class<?> k = conn.getClass(); k != null; k = k.getSuperclass()) {
+            for (Field g : k.getDeclaredFields()) {
+                if (List.class.isAssignableFrom(g.getType())) {
+                    g.setAccessible(true);
+                    Object val = g.get(conn);
+                    if (val instanceof List) {
+                        List<?> list = (List<?>) val;
+                        if (g.getGenericType() instanceof ParameterizedType
                                 && ((ParameterizedType) g.getGenericType()).getActualTypeArguments()[0] == ChannelFuture.class) {
-                            g.setAccessible(true);
-                            return (Collection<?>) g.get(conn);
+                            return list;
+                        }
+                        if (!list.isEmpty() && (list.get(0) instanceof ChannelFuture || list.get(0) instanceof io.netty.channel.Channel)) {
+                            return list;
+                        }
+                        String name = g.getName().toLowerCase();
+                        if (name.equals("channels") || name.equals("endpoints") || name.equals("g") || name.equals("f")) {
+                            return list;
                         }
                     }
                 }

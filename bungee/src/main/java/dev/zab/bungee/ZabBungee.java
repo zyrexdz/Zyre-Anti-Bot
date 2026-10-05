@@ -165,10 +165,23 @@ public final class ZabBungee extends Plugin implements Listener {
         Object proxy = getProxy();
         for (Class<?> c = proxy.getClass(); c != null; c = c.getSuperclass()) {
             for (Field f : c.getDeclaredFields()) {
-                if (Collection.class.isAssignableFrom(f.getType()) && f.getGenericType() instanceof ParameterizedType
-                        && ((ParameterizedType) f.getGenericType()).getActualTypeArguments()[0] == Channel.class) {
+                if (Collection.class.isAssignableFrom(f.getType())) {
                     f.setAccessible(true);
-                    return (Collection<?>) f.get(proxy);
+                    Object val = f.get(proxy);
+                    if (val instanceof Collection) {
+                        Collection<?> col = (Collection<?>) val;
+                        if (f.getGenericType() instanceof ParameterizedType
+                                && ((ParameterizedType) f.getGenericType()).getActualTypeArguments()[0] == Channel.class) {
+                            return col;
+                        }
+                        if (!col.isEmpty() && col.iterator().next() instanceof Channel) {
+                            return col;
+                        }
+                        String name = f.getName().toLowerCase();
+                        if (name.equals("listeners") || name.equals("channels")) {
+                            return col;
+                        }
+                    }
                 }
             }
         }

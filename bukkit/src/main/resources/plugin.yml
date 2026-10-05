@@ -1,7 +1,6 @@
 name: ZAB
 main: dev.zab.bukkit.ZabBukkit
 version: ${project.version}
-api-version: 1.13
 author: Zyre
 description: Zyre Anti Bot - live connection stats and bot blocking
 commands:
