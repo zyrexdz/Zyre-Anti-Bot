@@ -58,14 +58,16 @@ public final class Zab {
     private static final class Rate {
         final long[] buckets = new long[BUCKETS];
         final String label;
+        final String color;
         int cur;
         long value;
         long peak;
         long announced;
         long pending;
 
-        Rate(String label) {
+        Rate(String label, String color) {
             this.label = label;
+            this.color = color;
         }
 
         void slide(int steps) {
@@ -108,14 +110,14 @@ public final class Zab {
         }
     }
 
-    private final Rate cps = new Rate("CPS");
-    private final Rate ips = new Rate("IPSEC");
-    private final Rate logins = new Rate("Logins");
-    private final Rate pings = new Rate("Pings");
-    private final Rate motds = new Rate("MOTD");
-    private final Rate handshakes = new Rate("Handshakes");
-    private final Rate blocked = new Rate("Blocked");
-    private final Rate bytes = new Rate("Bytes");
+    private final Rate cps = new Rate("CPS", "\u00a79");
+    private final Rate ips = new Rate("IPSEC", "\u00a7a");
+    private final Rate logins = new Rate("Logins", "\u00a76");
+    private final Rate pings = new Rate("Pings", "\u00a7e");
+    private final Rate motds = new Rate("MOTD", "\u00a7d");
+    private final Rate handshakes = new Rate("Handshakes", "\u00a75");
+    private final Rate blocked = new Rate("Blocked", "\u00a7c");
+    private final Rate bytes = new Rate("Bytes", "\u00a77");
     private final Rate[] shown = {cps, ips, logins, pings, motds, handshakes};
     private final Rate[] all = {cps, ips, logins, pings, motds, handshakes, blocked, bytes};
     private final Rate[] byCounter = {cps, ips, logins, pings, handshakes, blocked, bytes, motds};
@@ -522,8 +524,8 @@ public final class Zab {
             for (Rate r : shown) {
                 long peak = r.peak;
                 if (peak > r.announced && peak >= minPeak) {
-                    emit("\u00a77" + r.label + " peak: " + color(r.announced) + fmt(r.announced)
-                            + " \u00a77\u2192 " + color(peak) + fmt(peak));
+                    emit(r.color + r.label + " \u00a77peak: " + r.color + fmt(r.announced)
+                            + " \u00a77\u2192 " + r.color + fmt(peak));
                     r.announced = peak;
                 }
             }
@@ -561,16 +563,8 @@ public final class Zab {
         return String.format(Locale.US, "%,d", n);
     }
 
-    private static String color(long n) {
-        if (n < 10) return "\u00a7a";
-        if (n < 100) return "\u00a7e";
-        if (n < 1000) return "\u00a76";
-        if (n < 10000) return "\u00a7c";
-        return "\u00a74";
-    }
-
-    private static String stat(String name, long n) {
-        return "\u00a77" + name + ": " + color(n) + fmt(n);
+    private static String stat(Rate r, String name) {
+        return r.color + name + ": " + r.color + fmt(r.value);
     }
 
     private static String onOff(boolean on) {
@@ -579,14 +573,14 @@ public final class Zab {
 
     private String buildBar() {
         StringBuilder sb = new StringBuilder(220).append(PREFIX)
-                .append(stat("CPS", cps.value)).append(" \u00a78\u2022 ")
-                .append(stat("IPSEC", ips.value)).append(" \u00a78\u2022 ")
-                .append(stat("LOGINS", logins.value)).append(" \u00a78\u2022 ")
-                .append(stat("PINGS", pings.value)).append(" \u00a78\u2022 ")
-                .append(stat("MOTD'S", motds.value)).append(" \u00a78\u2022 ")
-                .append(stat("HANDSHAKE/S", handshakes.value));
+                .append(stat(cps, "CPS")).append(" \u00a78\u2022 ")
+                .append(stat(ips, "IPSEC")).append(" \u00a78\u2022 ")
+                .append(stat(logins, "LOGINS")).append(" \u00a78\u2022 ")
+                .append(stat(pings, "PINGS")).append(" \u00a78\u2022 ")
+                .append(stat(motds, "MOTD'S")).append(" \u00a78\u2022 ")
+                .append(stat(handshakes, "HANDSHAKE/S"));
         if (blocked.value > 0) {
-            sb.append(" \u00a78\u2022 ").append(stat("BLOCKED", blocked.value));
+            sb.append(" \u00a78\u2022 ").append(stat(blocked, "BLOCKED"));
         }
         if (attack) {
             sb.append(" \u00a78\u2022 \u00a74\u00a7lATTACK");
@@ -663,12 +657,12 @@ public final class Zab {
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
-                    lines.add(PREFIX + "\u00a77" + r.label + ": " + color(r.value) + fmt(r.value)
-                            + " \u00a78(\u00a77peak " + color(r.peak) + fmt(r.peak) + "\u00a78)");
+                    lines.add(PREFIX + r.color + r.label + ": " + r.color + fmt(r.value)
+                            + " \u00a78(\u00a77peak " + r.color + fmt(r.peak) + "\u00a78)");
                 }
-                lines.add(PREFIX + "\u00a77Blocked: " + color(blocked.value) + fmt(blocked.value)
-                        + " \u00a78(\u00a77peak " + color(blocked.peak) + fmt(blocked.peak) + "\u00a78)");
-                lines.add(PREFIX + "\u00a77Bytes/s: " + color(bytes.value) + fmt(bytes.value));
+                lines.add(PREFIX + "\u00a7cBlocked: \u00a7c" + fmt(blocked.value)
+                        + " \u00a78(\u00a77peak \u00a7c" + fmt(blocked.peak) + "\u00a78)");
+                lines.add(PREFIX + "\u00a77Bytes/s: \u00a77" + fmt(bytes.value));
                 String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
                 lines.add(PREFIX + "\u00a77Blacklist: " + bl
                         + " \u00a78| \u00a77Attack: " + (attack ? "\u00a7cyes" : "\u00a7ano")
