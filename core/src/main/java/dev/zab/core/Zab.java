@@ -27,7 +27,7 @@ public final class Zab {
     private static final int BUCKETS = 20;
     private static final long SECOND = 1_000_000_000L;
     private static final long BUCKET_NANOS = 50_000_000L;
-    private static final List<String> SUBCOMMANDS = Arrays.asList("verbose", "antiafk", "blacklist", "barely", "smooth", "stats", "reset", "unblock");
+    private static final List<String> SUBCOMMANDS = Arrays.asList("verbose", "antiafk", "blacklist", "barely", "peak", "stats", "reset", "unblock");
 
     private static final int C_CPS = 0, C_IPS = 1, C_LOGINS = 2, C_PINGS = 3, C_HANDSHAKES = 4, C_BLOCKED = 5, C_BYTES = 6, C_MOTDS = 7;
     private static final int NUM_COUNTERS = 8;
@@ -49,7 +49,7 @@ public final class Zab {
 
     private volatile long cachedNanos;
     private volatile long cachedMillis;
-    private long lastSlideNanos;
+    private long lastTickNanos;
 
     private static final class Rate {
         final long[] buckets = new long[BUCKETS];
@@ -64,40 +64,23 @@ public final class Zab {
             this.label = label;
         }
 
-        void slide(int steps, boolean smooth) {
-            if (steps <= 0) return;
-            if (!smooth) {
-                int next = (cur + 1) % BUCKETS;
-                buckets[next] = pending;
-                pending = 0;
-                cur = next;
-                long sum = 0;
-                for (int i = 0; i < BUCKETS; i++) sum += buckets[i];
-                value = sum;
-                if (value > peak) peak = value;
-                return;
-            }
-            if (steps >= BUCKETS) {
-                long perBucket = pending / steps;
-                long remainder = pending % steps;
-                for (int i = 0; i < BUCKETS; i++) {
-                    buckets[i] = perBucket + (i < remainder ? 1 : 0);
-                }
-                pending = 0;
-                cur = (cur + steps) % BUCKETS;
-            } else {
-                long perBucket = pending / steps;
-                long remainder = pending % steps;
-                for (int s = 0; s < steps; s++) {
-                    cur = (cur + 1) % BUCKETS;
-                    buckets[cur] = perBucket + (s < remainder ? 1 : 0);
-                }
-                pending = 0;
-            }
+        void slide(long deltaNanos, boolean peakMode) {
+            int next = (cur + 1) % BUCKETS;
+            buckets[next] = pending;
+            cur = next;
+
             long sum = 0;
             for (int i = 0; i < BUCKETS; i++) sum += buckets[i];
-            value = sum;
+
+            if (peakMode && deltaNanos > 0) {
+                long instant = pending * SECOND / deltaNanos;
+                value = Math.max(sum, instant);
+            } else {
+                value = sum;
+            }
+
             if (value > peak) peak = value;
+            pending = 0;
         }
     }
 
@@ -153,7 +136,7 @@ public final class Zab {
     private volatile boolean attack;
     private volatile boolean blacklistOn = true;
     private volatile boolean barelyMode = false;
-    private volatile boolean smoothMode = false;
+    private volatile boolean peakMode = false;
     private long attackUntil;
     private int ticks;
 
@@ -186,7 +169,7 @@ public final class Zab {
         }
         cachedNanos = System.nanoTime();
         cachedMillis = System.currentTimeMillis();
-        lastSlideNanos = cachedNanos;
+        lastTickNanos = cachedNanos;
         attackUntil = cachedNanos;
         tuneKernelIfRoot();
         ticker.scheduleAtFixedRate(this::tick, 50, 50, TimeUnit.MILLISECONDS);
@@ -274,12 +257,12 @@ public final class Zab {
         }
     }
 
-    public boolean isSmooth() {
-        return smoothMode;
+    public boolean isPeak() {
+        return peakMode;
     }
 
-    public void setSmooth(boolean smooth) {
-        this.smoothMode = smooth;
+    public void setPeak(boolean peak) {
+        this.peakMode = peak;
     }
 
     public boolean connect(String ip) {
@@ -388,20 +371,8 @@ public final class Zab {
     private void tick() {
         try {
             long now = System.nanoTime();
-            if (lastSlideNanos == 0) {
-                lastSlideNanos = now;
-            }
-            long elapsed = now - lastSlideNanos;
-            int steps = (int) (elapsed / BUCKET_NANOS);
-            if (steps <= 0) {
-                return;
-            }
-            if (steps > 200) {
-                steps = BUCKETS;
-                lastSlideNanos = now;
-            } else {
-                lastSlideNanos += (long) steps * BUCKET_NANOS;
-            }
+            long delta = lastTickNanos == 0 ? BUCKET_NANOS : (now - lastTickNanos);
+            lastTickNanos = now;
 
             cachedNanos = now;
             cachedMillis = System.currentTimeMillis();
@@ -440,7 +411,7 @@ public final class Zab {
                 tc.drained[C_BYTES] = curBytes;
             }
 
-            for (Rate r : all) r.slide(steps, smoothMode);
+            for (Rate r : all) r.slide(delta, peakMode);
 
             if (cps.value >= attackCps) {
                 attackUntil = now + attackEnd;
@@ -472,15 +443,6 @@ public final class Zab {
                 cachedBar = buildBar();
             }
 
-            if (++ticks % 20 != 0) {
-                return;
-            }
-
-            long ms = cachedMillis;
-            blacklist.values().removeIf(e -> e.untilMillis <= ms);
-            pending.values().removeIf(t -> now - t > SECOND * 60);
-            ipRecords.values().removeIf(r -> now - r.lastSeen > SECOND * 5);
-
             for (Rate r : shown) {
                 long peak = r.peak;
                 if (peak > r.announced && peak >= minPeak) {
@@ -489,6 +451,15 @@ public final class Zab {
                     r.announced = peak;
                 }
             }
+
+            if (++ticks % 20 != 0) {
+                return;
+            }
+
+            long ms = cachedMillis;
+            blacklist.values().removeIf(e -> e.untilMillis <= ms);
+            pending.values().removeIf(t -> now - t > SECOND * 60);
+            ipRecords.values().removeIf(r -> now - r.lastSeen > SECOND * 5);
         } catch (RuntimeException err) {
             log.accept("Tick error: " + err.getMessage());
         }
@@ -547,62 +518,61 @@ public final class Zab {
         String arg = args.length < 2 ? "" : args[1].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "blacklist":
-                if (!arg.equals("on") && !arg.equals("off") && !arg.equals("barely") && !arg.equals("smooth") && !arg.equals("accurate")) {
-                    String cur = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (smoothMode ? "\u00a7bsmooth" : "\u00a7aon"));
+                if (!arg.equals("on") && !arg.equals("off") && !arg.equals("barely") && !arg.equals("peak")) {
+                    String cur = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is currently " + cur
-                            + "\u00a77. Use \u00a7f/zab blacklist <on|off|barely|smooth>");
+                            + "\u00a77. Use \u00a7f/zab blacklist <on|off|barely|peak>");
                 }
-                if (arg.equals("smooth") || arg.equals("accurate")) {
+                if (arg.equals("peak")) {
                     blacklistOn = true;
                     barelyMode = false;
-                    smoothMode = true;
-                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7bsmooth\u00a77. Distributing lag bursts across elapsed time to eliminate 1-ms spikes.");
+                    peakMode = true;
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7cpeak\u00a77. Fast micro-window peak analyzer enabled.");
                 }
                 if (arg.equals("barely")) {
                     blacklistOn = true;
                     barelyMode = true;
-                    smoothMode = false;
+                    peakMode = false;
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings.");
                 }
                 if (arg.equals("on")) {
                     blacklistOn = true;
                     barelyMode = false;
-                    smoothMode = false;
+                    peakMode = false;
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7aon\u00a77. Standard high-burst mode (raw peak CPS).");
                 }
                 blacklistOn = false;
                 barelyMode = false;
-                smoothMode = false;
+                peakMode = false;
                 return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7coff\u00a77. Connections will not be blocked.");
             case "barely":
                 if (arg.equals("on")) {
                     blacklistOn = true;
                     barelyMode = true;
-                    smoothMode = false;
+                    peakMode = false;
                 } else if (arg.equals("off")) {
                     barelyMode = false;
                 } else {
                     barelyMode = !barelyMode;
                     if (barelyMode) {
                         blacklistOn = true;
-                        smoothMode = false;
+                        peakMode = false;
                     }
                 }
                 return Collections.singletonList(PREFIX + (barelyMode
                         ? "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings."
                         : "\u00a77Blacklist is now \u00a7aon\u00a77. Dropping bad connections instantly at accept for maximum CPS."));
-            case "smooth":
-            case "accurate":
+            case "peak":
                 if (arg.equals("on")) {
-                    smoothMode = true;
+                    peakMode = true;
                 } else if (arg.equals("off")) {
-                    smoothMode = false;
+                    peakMode = false;
                 } else {
-                    smoothMode = !smoothMode;
+                    peakMode = !peakMode;
                 }
-                return Collections.singletonList(PREFIX + (smoothMode
-                        ? "\u00a77Smooth mode is now \u00a7aon\u00a77. Distributing lag bursts across elapsed time."
-                        : "\u00a77Smooth mode is now \u00a7coff\u00a77. Standard high-burst mode (raw peak CPS)."));
+                return Collections.singletonList(PREFIX + (peakMode
+                        ? "\u00a77Peak mode is now \u00a7con\u00a77. Fast micro-window peak analyzer enabled."
+                        : "\u00a77Peak mode is now \u00a7coff\u00a77. Standard 1-second rolling window."));
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
@@ -612,7 +582,7 @@ public final class Zab {
                 lines.add(PREFIX + "\u00a77Blocked/s: " + color(blocked.value) + fmt(blocked.value)
                         + " \u00a78(\u00a77peak " + color(blocked.peak) + fmt(blocked.peak) + "\u00a78)");
                 lines.add(PREFIX + "\u00a77Bytes/s: " + color(bytes.value) + fmt(bytes.value));
-                String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (smoothMode ? "\u00a7bsmooth" : "\u00a7aon"));
+                String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
                 lines.add(PREFIX + "\u00a77Blacklist: " + bl
                         + " \u00a78| \u00a77Attack: " + (attack ? "\u00a7cyes" : "\u00a7ano")
                         + " \u00a78| \u00a77Blocked IPs: \u00a7f" + blacklist.size()
@@ -665,7 +635,7 @@ public final class Zab {
                 return Arrays.asList(
                         PREFIX + "\u00a7f/zab verbose [top|down] \u00a78- \u00a77toggle the live counter",
                         PREFIX + "\u00a7f/zab antiafk [on|off|status] [version] \u00a78- \u00a77keep server online with ZABAFK bot",
-                        PREFIX + "\u00a7f/zab blacklist <on|off|barely|smooth> \u00a78- \u00a77toggle bot blocking (smooth: lag burst smoothing, on: raw peak CPS)",
+                        PREFIX + "\u00a7f/zab blacklist <on|off|barely|peak> \u00a78- \u00a77toggle bot blocking (peak: fast micro-window peak detection)",
                         PREFIX + "\u00a7f/zab stats \u00a78- \u00a77view current rates and peaks",
                         PREFIX + "\u00a7f/zab reset \u00a78- \u00a77reset all peak records",
                         PREFIX + "\u00a7f/zab unblock <ip> \u00a78- \u00a77unblock an IP address");
@@ -677,8 +647,8 @@ public final class Zab {
         if (args.length == 1) {
             options = SUBCOMMANDS;
         } else if (args.length == 2 && args[0].equalsIgnoreCase("blacklist")) {
-            options = Arrays.asList("on", "off", "barely", "smooth");
-        } else if (args.length == 2 && (args[0].equalsIgnoreCase("barely") || args[0].equalsIgnoreCase("smooth"))) {
+            options = Arrays.asList("on", "off", "barely", "peak");
+        } else if (args.length == 2 && (args[0].equalsIgnoreCase("barely") || args[0].equalsIgnoreCase("peak"))) {
             options = Arrays.asList("on", "off");
         } else if (args.length == 2 && args[0].equalsIgnoreCase("antiafk")) {
             options = Arrays.asList("on", "off", "status", "1.16.5", "1.20.4", "1.8.8");

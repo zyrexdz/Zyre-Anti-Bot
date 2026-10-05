@@ -39,9 +39,9 @@ Most antibots choke during real bot attacks because they let thousands of fake c
 All commands require the `zab.admin` permission (OP by default on Spigot).
 
 - `/zab verbose [top|down]` - Toggle the real-time HUD on your screen.
-- `/zab blacklist <on|off|barely|smooth>` - Turn bot blocking on (default high-burst mode for raw peak CPS), off, barely (probes packet metrics), or smooth (distributes lag bursts across elapsed time).
+- `/zab blacklist <on|off|barely|peak>` - Turn bot blocking on (default high-burst mode for raw peak CPS), off, barely (probes packet metrics), or peak (fast micro-window analyzer to catch instant peaks before server crash).
 - `/zab barely [on|off]` - Shortcut to toggle packet-probing mode.
-- `/zab smooth [on|off]` - Shortcut to toggle elapsed-time burst smoothing.
+- `/zab peak [on|off]` - Shortcut to toggle fast micro-window peak detection.
 - `/zab antiafk [on|off|status] [version]` - Keep your server awake with an internal bot named ZABAFK.
 - `/zab stats` - Show current rates and peak records in chat.
 - `/zab reset` - Reset peak traffic records.
