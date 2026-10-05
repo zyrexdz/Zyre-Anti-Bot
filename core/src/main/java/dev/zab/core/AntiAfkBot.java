@@ -81,6 +81,10 @@ public final class AntiAfkBot {
                 + ") on port \u00a7f" + port + "\u00a7a.";
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
     public synchronized String stop() {
         if (!active) {
             return Zab.PREFIX + "\u00a77Anti-AFK bot is not running.";
@@ -133,9 +137,7 @@ public final class AntiAfkBot {
 
                 ByteArrayOutputStream lsb = new ByteArrayOutputStream();
                 writeString(lsb, "ZABAFK");
-                if (protocol >= 761 && protocol <= 763) {
-                    lsb.write(0);
-                } else if (protocol >= 764) {
+                if ((protocol >= 759 && protocol <= 760) || protocol >= 764) {
                     ByteBuffer bb = ByteBuffer.allocate(16);
                     UUID u = UUID.nameUUIDFromBytes("ZABAFK".getBytes(StandardCharsets.UTF_8));
                     bb.putLong(u.getMostSignificantBits());
@@ -387,7 +389,8 @@ public final class AntiAfkBot {
             case "1.17.1": return 756;
             case "1.18": case "1.18.1": return 757;
             case "1.18.2": return 758;
-            case "1.19": case "1.19.1": case "1.19.2": return 760;
+            case "1.19": return 759;
+            case "1.19.1": case "1.19.2": return 760;
             case "1.19.3": return 761;
             case "1.19.4": return 762;
             case "1.20": case "1.20.1": return 763;
@@ -397,6 +400,9 @@ public final class AntiAfkBot {
             case "1.21": case "1.21.1": return 767;
             case "1.21.2": case "1.21.3": return 768;
             case "1.21.4": return 769;
+            case "1.21.5": return 770;
+            case "1.21.6": return 771;
+            case "1.21.7": case "1.21.8": return 772;
             case "26.1": case "1.26.1": return 775;
             case "26.2": case "1.26.2": return 776;
             case "26.3": case "1.26.3": return 777;
@@ -419,10 +425,16 @@ public final class AntiAfkBot {
     }
 
     public static String protocolToVersion(int proto) {
+        if (proto == 777) return "26.3";
         if (proto == 776) return "26.2";
         if (proto == 775) return "26.1";
+        if (proto == 772) return "1.21.7";
+        if (proto == 771) return "1.21.6";
+        if (proto == 770) return "1.21.5";
+        if (proto == 769) return "1.21.4";
         if (proto == 767) return "1.21";
         if (proto == 765) return "1.20.4";
+        if (proto == 759) return "1.19";
         if (proto == 754) return "1.16.5";
         if (proto == 340) return "1.12.2";
         if (proto == 47) return "1.8.x";

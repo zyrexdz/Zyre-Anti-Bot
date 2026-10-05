@@ -29,8 +29,9 @@ public final class NettyHook {
     private static final String PROBE = "zab-probe";
     private static final int MAX_BUFFER = 4096;
     private static final int WAIT = 0, PASS = 1, DROP = 2, RECONNECT = 3;
-    private static final byte[] RECONNECT_KICK = loginDisconnect("{\"text\":\"\u00a7e\u00a7lZyre Anti Bot\\n\\n"
-            + "\u00a77Verifying connection\u2026\\n\u00a7aPlease reconnect to join.\"}");
+    private static final byte[] RECONNECT_KICK = loginDisconnect("{\"text\":\"ZAB Anti Bot\",\"bold\":true,\"color\":\"yellow\",\"extra\":["
+            + "{\"text\":\"\\n\\nVerifying connection\\u2026\\n\",\"color\":\"gray\",\"bold\":false},"
+            + "{\"text\":\"Please reconnect to join.\",\"color\":\"green\"}]}");
 
     private final Zab zab;
     private final Acceptor acceptor = new Acceptor();
@@ -252,7 +253,6 @@ public final class NettyHook {
                 if (idBytes == 0 || idBytes > 5) return;
 
                 if (pktLen == 1 && id == 0) {
-                    zab.ping();
                     zab.motd();
                     return;
                 }
@@ -307,7 +307,6 @@ public final class NettyHook {
 
                 if (nextState == 1) {
                     zab.ping();
-                    zab.motd();
                 } else if (nextState == 2 || nextState == 3) {
                     zab.login();
                 }
@@ -346,7 +345,6 @@ public final class NettyHook {
                         if ((b & 0x80) == 0) break;
                     }
                     if (pktLen == 1 && id == 0) {
-                        zab.ping();
                         zab.motd();
                         done = true;
                         return;
@@ -407,7 +405,6 @@ public final class NettyHook {
                     if (nextState == 1) {
                         state = 1;
                         zab.ping();
-                        zab.motd();
                     } else if (nextState == 2 || nextState == 3) {
                         state = 2;
                     } else {
@@ -454,6 +451,9 @@ public final class NettyHook {
                 zab.login();
                 done = true;
             } else if (state == 1) {
+                if (id == 0) {
+                    zab.motd();
+                }
                 done = true;
             }
         }

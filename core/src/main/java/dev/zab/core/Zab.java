@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +19,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 
@@ -33,6 +35,7 @@ public final class Zab {
     private static final int NUM_COUNTERS = 8;
 
     private static final class ThreadCounters {
+        final Thread thread = Thread.currentThread();
         final long[] current = new long[NUM_COUNTERS];
         final long[] drained = new long[NUM_COUNTERS];
     }
@@ -49,7 +52,7 @@ public final class Zab {
 
     private volatile long cachedNanos;
     private volatile long cachedMillis;
-    private long lastTickNanos;
+    private long lastSlideNanos;
 
     private static final class Rate {
         final long[] buckets = new long[BUCKETS];
@@ -64,39 +67,43 @@ public final class Zab {
             this.label = label;
         }
 
-        void slide(long deltaNanos, boolean peakMode) {
-            int next = (cur + 1) % BUCKETS;
-            buckets[next] = pending;
-            cur = next;
+        void slide(int steps) {
+            if (steps >= BUCKETS) {
+                Arrays.fill(buckets, 0);
+                cur = 0;
+            } else {
+                for (int s = 0; s < steps; s++) {
+                    cur = (cur + 1) % BUCKETS;
+                    buckets[cur] = 0;
+                }
+            }
+            buckets[cur] += pending;
+            pending = 0;
 
             long sum = 0;
-            for (int i = 0; i < BUCKETS; i++) sum += buckets[i];
-
-            if (peakMode && deltaNanos > 0) {
-                long instant = pending * SECOND / deltaNanos;
-                value = Math.max(sum, instant);
-            } else {
-                value = sum;
+            for (int i = 0; i < BUCKETS; i++) {
+                sum += buckets[i];
             }
-
-            if (value > peak) peak = value;
-            pending = 0;
+            value = sum;
+            if (value > peak) {
+                peak = value;
+            }
         }
     }
 
     private static final class IpRecord {
         long windowStart;
         int count;
-        long lastSeen;
+        volatile long lastSeen;
     }
 
     private static final class BlacklistEntry {
         final long untilMillis;
-        volatile long windowStart;
+        final AtomicLong windowStart;
 
         BlacklistEntry(long untilMillis, long windowStart) {
             this.untilMillis = untilMillis;
-            this.windowStart = windowStart;
+            this.windowStart = new AtomicLong(windowStart);
         }
     }
 
@@ -110,6 +117,7 @@ public final class Zab {
     private final Rate bytes = new Rate("Bytes");
     private final Rate[] shown = {cps, ips, logins, pings, motds, handshakes};
     private final Rate[] all = {cps, ips, logins, pings, motds, handshakes, blocked, bytes};
+    private final Rate[] byCounter = {cps, ips, logins, pings, handshakes, blocked, bytes, motds};
 
     private final ConcurrentHashMap<String, IpRecord> ipRecords = new ConcurrentHashMap<>(4096, 0.5f, 64);
     private final ConcurrentHashMap<String, BlacklistEntry> blacklist = new ConcurrentHashMap<>(1024, 0.5f, 32);
@@ -169,7 +177,7 @@ public final class Zab {
         }
         cachedNanos = System.nanoTime();
         cachedMillis = System.currentTimeMillis();
-        lastTickNanos = cachedNanos;
+        lastSlideNanos = cachedNanos;
         attackUntil = cachedNanos;
         tuneKernelIfRoot();
         ticker.scheduleAtFixedRate(this::tick, 50, 50, TimeUnit.MILLISECONDS);
@@ -226,6 +234,10 @@ public final class Zab {
     public void stop() {
         ticker.shutdownNow();
         antiAfk.stop();
+        saveVerified();
+    }
+
+    private void saveVerified() {
         try {
             verifiedFile.getParentFile().mkdirs();
             Files.write(verifiedFile.toPath(), verified, StandardCharsets.UTF_8);
@@ -304,8 +316,8 @@ public final class Zab {
         BlacklistEntry bl = blacklist.get(ip);
         if (bl != null) {
             if (bl.untilMillis > cachedMillis) {
-                if (now - bl.windowStart >= SECOND) {
-                    bl.windowStart = now;
+                long w = bl.windowStart.get();
+                if (now - w >= SECOND && bl.windowStart.compareAndSet(w, now)) {
                     tc.current[C_IPS]++;
                 }
                 tc.current[C_BLOCKED]++;
@@ -314,29 +326,25 @@ public final class Zab {
             blacklist.remove(ip);
         }
 
-        IpRecord rec = ipRecords.get(ip);
-        if (rec == null) {
-            rec = new IpRecord();
-            rec.windowStart = now;
-            rec.count = 1;
-            rec.lastSeen = now;
-            IpRecord existing = ipRecords.putIfAbsent(ip, rec);
-            if (existing != null) {
-                rec = existing;
-                rec.count++;
-                rec.lastSeen = now;
+        IpRecord rec = ipRecords.compute(ip, (k, r) -> {
+            if (r == null) {
+                r = new IpRecord();
+                r.windowStart = now;
+                r.count = 1;
+                r.lastSeen = now;
+                tc.current[C_IPS]++;
+                return r;
             }
-            tc.current[C_IPS]++;
-        } else {
-            if (now - rec.windowStart >= SECOND) {
-                rec.windowStart = now;
-                rec.count = 1;
+            if (now - r.windowStart >= SECOND) {
+                r.windowStart = now;
+                r.count = 1;
                 tc.current[C_IPS]++;
             } else {
-                rec.count++;
+                r.count++;
             }
-            rec.lastSeen = now;
-        }
+            r.lastSeen = now;
+            return r;
+        });
 
         if (rec.count > maxPerIp) {
             punish(ip);
@@ -398,47 +406,33 @@ public final class Zab {
     private void tick() {
         try {
             long now = System.nanoTime();
-            long delta = lastTickNanos == 0 ? BUCKET_NANOS : (now - lastTickNanos);
-            lastTickNanos = now;
+            if (lastSlideNanos == 0) {
+                lastSlideNanos = now;
+            }
+            long elapsed = now - lastSlideNanos;
+            int steps = (int) (elapsed / BUCKET_NANOS);
+            if (steps <= 0) {
+                return;
+            }
+            if (steps > 200) {
+                steps = BUCKETS;
+                lastSlideNanos = now;
+            } else {
+                lastSlideNanos += (long) steps * BUCKET_NANOS;
+            }
 
             cachedNanos = now;
             cachedMillis = System.currentTimeMillis();
 
-            for (ThreadCounters tc : allLocals) {
-                long curCps = tc.current[C_CPS];
-                cps.pending += (curCps - tc.drained[C_CPS]);
-                tc.drained[C_CPS] = curCps;
-
-                long curIps = tc.current[C_IPS];
-                ips.pending += (curIps - tc.drained[C_IPS]);
-                tc.drained[C_IPS] = curIps;
-
-                long curLogins = tc.current[C_LOGINS];
-                logins.pending += (curLogins - tc.drained[C_LOGINS]);
-                tc.drained[C_LOGINS] = curLogins;
-
-                long curPings = tc.current[C_PINGS];
-                pings.pending += (curPings - tc.drained[C_PINGS]);
-                tc.drained[C_PINGS] = curPings;
-
-                long curMotds = tc.current[C_MOTDS];
-                motds.pending += (curMotds - tc.drained[C_MOTDS]);
-                tc.drained[C_MOTDS] = curMotds;
-
-                long curHs = tc.current[C_HANDSHAKES];
-                handshakes.pending += (curHs - tc.drained[C_HANDSHAKES]);
-                tc.drained[C_HANDSHAKES] = curHs;
-
-                long curBlocked = tc.current[C_BLOCKED];
-                blocked.pending += (curBlocked - tc.drained[C_BLOCKED]);
-                tc.drained[C_BLOCKED] = curBlocked;
-
-                long curBytes = tc.current[C_BYTES];
-                bytes.pending += (curBytes - tc.drained[C_BYTES]);
-                tc.drained[C_BYTES] = curBytes;
+            for (Iterator<ThreadCounters> it = allLocals.iterator(); it.hasNext(); ) {
+                ThreadCounters tc = it.next();
+                drain(tc);
+                if (!tc.thread.isAlive()) {
+                    it.remove();
+                }
             }
 
-            for (Rate r : all) r.slide(delta, peakMode);
+            for (Rate r : all) r.slide(steps);
 
             if (cps.value >= attackCps) {
                 attackUntil = now + attackEnd;
@@ -487,8 +481,19 @@ public final class Zab {
             blacklist.values().removeIf(e -> e.untilMillis <= ms);
             pending.values().removeIf(t -> now - t > SECOND * 60);
             ipRecords.values().removeIf(r -> now - r.lastSeen > SECOND * 5);
-        } catch (RuntimeException err) {
-            log.accept("Tick error: " + err.getMessage());
+            if (ticks % 1200 == 0) {
+                saveVerified();
+            }
+        } catch (Throwable err) {
+            log.accept("Tick error: " + err);
+        }
+    }
+
+    private void drain(ThreadCounters tc) {
+        for (int i = 0; i < NUM_COUNTERS; i++) {
+            long cur = tc.current[i];
+            byCounter[i].pending += cur - tc.drained[i];
+            tc.drained[i] = cur;
         }
     }
 
@@ -617,7 +622,7 @@ public final class Zab {
                 return lines;
             case "reset":
                 ticker.execute(() -> {
-                    for (Rate r : shown) {
+                    for (Rate r : all) {
                         r.peak = r.value;
                         r.announced = 0;
                     }

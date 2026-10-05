@@ -301,7 +301,7 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
 
     @EventHandler
     public void onKick(PlayerKickEvent e) {
-        if ("ZABAFK".equalsIgnoreCase(e.getPlayer().getName())) {
+        if ("ZABAFK".equalsIgnoreCase(e.getPlayer().getName()) && zab.getAntiAfk().isActive()) {
             e.setCancelled(true);
         }
     }

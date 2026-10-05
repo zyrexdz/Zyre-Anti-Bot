@@ -25,9 +25,9 @@ All commands require the `zab.admin` permission (defaults to OP on Spigot).
 - `/zab verbose [top|down]` - Toggle live traffic HUD (BossBar or Action Bar).
 - `/zab blacklist <on|off|barely|peak>` - Set blacklist mode:
   - `on` - Drops blacklisted IPs instantly at socket accept.
-  - `peak` - Micro-window tracking to capture instant CPS spikes before crashes.
+  - peak - Instant 50ms peak detection to capture spikes immediately before crashes (100% real counts, no extrapolation).
   - `barely` - Probes packet headers before blocking (tracks handshakes/logins/pings).
-  - `off` - Disables blocking (monitor only).
+  - `off` - Disables blocking (monitor only; CPS only, since per-IP tracking is what makes IPSEC possible).
 - `/zab peak [on|off]` - Toggle instant peak detection.
 - `/zab barely [on|off]` - Toggle packet probing mode.
 - `/zab antiafk [on|off|status] [version]` - Keep server alive with an internal client (`ZABAFK`).
@@ -72,8 +72,8 @@ antiafk-password: "" # AuthMe password if applicable
 ## How It Works
 
 - **TCP-Level Drop**: Blacklisted IPs are aborted immediately at the Netty socket level (`closeForcibly()`) without creating channel pipelines or decoding packets.
-- **Accurate Rates**: Tracks raw connection attempts (`CPS`) and unique IPs (`IPSEC`) before any filtering runs, so stats reflect actual incoming traffic.
-- **Rejoin Verification**: When traffic exceeds `attack-cps`, unverified connections are dropped with a reconnect prompt. Real players rejoin and get cached in `verified.txt`, while one-shot bot proxies are dropped.
+- **Accurate Rates**: All rates are true events-per-second measured against real elapsed time, so they stay correct even while ticks lag. `CPS` is the connection rate over the last second of wall-clock time (a 2s freeze holding 2,000 connections reports 1,000/s, not 2,000). `IPSEC` counts unique IPs that opened a new per-second connection window — each IP counts at most once per second, whether it got through or was blocked, so 100 attacking devices can never show as more than 100. It requires blacklist `on` (monitor mode tracks CPS only, since per-IP tracking is what makes the number possible).
+- **Rejoin Verification**: When the connection rate exceeds `attack-cps`, unverified connections are dropped with a reconnect prompt. Real players rejoin and get cached in `verified.txt` (also autosaved once a minute so a crash can't lose it), while one-shot bot proxies are dropped.
 - **Anti-AFK Bot**: If your host shuts down empty servers, `/zab antiafk on` runs a lightweight local client on localhost that handles keep-alives and movement.
 
 ## Building
