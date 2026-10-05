@@ -4,6 +4,10 @@
 
 A lightweight, high performance antibot and live connection monitor for **BungeeCord**, **Waterfall**, **Paper**, and **Spigot**.
 
+<p align="center">
+  <img src="assets/proof.png" alt="300k+ CPS Peak Proof" />
+</p>
+
 ### Supported Versions & Software
 - **Minecraft Versions**: **1.8.8 up to 26.2+** (1.8 – 1.21.x, 26.1, 26.2, and future releases)
 - **Server Platforms**: Paper, Purpur, Spigot (1.8.8 to 26.2+)
@@ -19,7 +23,7 @@ Most antibots choke during real bot attacks because they let thousands of fake c
 | **Dropping bots** | Sends disconnect packet | Channel close | Instant TCP abort (`closeForcibly`) before channel setup |
 | **CPU on 10k CPS attack** | High (decodes all packets) | Moderate | Minimal (0 allocations for banned IPs) |
 | **Live HUD** | Chat spam or scoreboard | Action bar / BossBar | Real-time BossBar (`/zab verbose top`) or Action Bar (`/zab verbose down`) |
-| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, Handshakes (50ms rolling window) |
+| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, MOTD'S, Handshakes (50ms rolling window) |
 | **Built-in Bot** | None | None | Virtual Anti-AFK bot with auto protocol negotiation (`/zab antiafk`) |
 
 ## Quickstart
@@ -35,7 +39,8 @@ Most antibots choke during real bot attacks because they let thousands of fake c
 All commands require the `zab.admin` permission (OP by default on Spigot).
 
 - `/zab verbose [top|down]` - Toggle the real-time HUD on your screen.
-- `/zab blacklist <on|off>` - Turn bot blocking on or off. Metrics stay completely raw and live either way.
+- `/zab blacklist <on|off|barely>` - Turn bot blocking on, off, or barely (probes packets before dropping to track raw metrics).
+- `/zab barely [on|off]` - Shortcut to toggle packet-probing mode.
 - `/zab antiafk [on|off|status] [version]` - Keep your server awake with an internal bot named ZABAFK.
 - `/zab stats` - Show current rates and peak records in chat.
 - `/zab reset` - Reset peak traffic records.
