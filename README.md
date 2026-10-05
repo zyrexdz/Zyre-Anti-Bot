@@ -12,7 +12,7 @@ ZAB is built to stop that completely.
 
 While normal antibot plugins wait until bots are already inside Minecraft to kick them, ZAB drops malicious connections the microsecond they touch your port. It has been tested and verified against brutal floods over 300,000 connections per second with zero server lag, keeping your server running at a solid 20.0 TPS while real players keep playing like nothing happened.
 
-Supports Minecraft 1.8 through 26.2+ on Java 8 to 25+.
+Supports Minecraft 1.8 through 26.3+ on Java 8 to 25+.
 
 ## Why ZAB is the Best Protection
 
@@ -63,7 +63,7 @@ Turns on an on-screen live HUD so you can watch incoming attacks get blocked in 
 Spawns a fake local player named `ZABAFK` on localhost to keep your server alive.
 * Why use this: Many free or budget hosts put servers to sleep or shut them down completely when zero players are online. Running this keeps 1 player connected so your server stays online 24/7.
 * Automatically jumps and looks around every 2 seconds so anti-AFK plugins do not kick it.
-* Supports custom versions like `/zab antiafk 1.20.4` or `/zab antiafk 26.2`, or leave it on auto.
+* Supports custom versions like `/zab antiafk 1.20.4` or `/zab antiafk 26.3`, or leave it on auto.
 * If your server uses a login plugin like AuthMe, set `antiafk-password` in `config.yml` and the bot will automatically log in.
 
 ### `/zab peak [on|off]`
@@ -131,7 +131,7 @@ When connection rates exceed `attack-cps`, attack mode activates. Connections fr
 On Linux startup, ZAB reads `/proc/self/limits`. If the process soft limit for open files (`nofile`) is lower than the host hard limit, ZAB invokes `prlimit` on its own PID to unlock the full hard limit ceiling without needing root privileges. If root access is detected, it automatically writes optimal TCP parameters to `/proc/sys/net/core/somaxconn` (65535), `tcp_max_syn_backlog` (65535), `tcp_tw_reuse` (1), and `tcp_fin_timeout` (15).
 
 ### 5. Multi-Version Protocol Engine
-The built-in Anti-AFK client handles Minecraft protocol states from 1.8 (protocol 47) up through 26.2 (protocol 776). It implements VarInt frame encoding, zlib packet compression, server teleport confirmation, keep-alive responses, position/rotation packets, and automatic protocol fallback detection based on server ping responses and disconnect messages.
+The built-in Anti-AFK client handles Minecraft protocol states from 1.8 (protocol 47) up through 26.3 (protocol 777). It implements VarInt frame encoding, zlib packet compression, server teleport confirmation, keep-alive responses, position/rotation packets, and automatic protocol fallback detection based on server ping responses and disconnect messages.
 
 ## Building
 

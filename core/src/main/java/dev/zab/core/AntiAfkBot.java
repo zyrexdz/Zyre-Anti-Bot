@@ -407,9 +407,10 @@ public final class AntiAfkBot {
             case "26.2": case "1.26.2": return 776;
             case "26.3": case "1.26.3": return 777;
             default:
+                if (ver.startsWith("26.3") || ver.startsWith("1.26.3")) return 777;
                 if (ver.startsWith("26.2") || ver.startsWith("1.26.2")) return 776;
                 if (ver.startsWith("26.1") || ver.startsWith("1.26.1")) return 775;
-                if (ver.startsWith("26") || ver.startsWith("1.26")) return 776;
+                if (ver.startsWith("26") || ver.startsWith("1.26")) return 777;
                 if (ver.startsWith("1.21")) return 767;
                 if (ver.startsWith("1.20")) return 765;
                 if (ver.startsWith("1.19")) return 762;
