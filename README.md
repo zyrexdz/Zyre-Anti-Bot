@@ -1,6 +1,6 @@
 # ZAB (Zyre Anti Bot)
 
-Antibot and live traffic monitor for BungeeCord, Waterfall, Paper, and Spigot.
+The fastest Netty antibot and live traffic monitor for BungeeCord, Waterfall, Paper, and Spigot. Inspired by Sonar Antibot.
 
 <p align="center">
   <img src="assets/proof.png" alt="300k+ CPS Peak Proof" />
@@ -8,7 +8,7 @@ Antibot and live traffic monitor for BungeeCord, Waterfall, Paper, and Spigot.
 
 Most antibot plugins let thousands of connections in before checking them, which lags or crashes the server. ZAB closes blocked connections immediately so your server doesn't waste CPU or RAM decoding packets for them.
 
-Runs on Minecraft 1.8 through 1.21+ (Java 8 to 21+).
+Supports Minecraft 1.8 through 26.2+ on Java 8 to 25+.
 
 ## Quick Setup
 
@@ -89,6 +89,9 @@ mvn clean package
 ```
 
 Jars will be in `bungee/target/` and `bukkit/target/`.
+
+## Credits
+- Inspired by **Sonar Antibot**.
 
 ## License
 
