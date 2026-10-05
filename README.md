@@ -6,7 +6,7 @@ Antibot and live traffic monitor for BungeeCord, Waterfall, Paper, and Spigot.
   <img src="assets/proof.png" alt="300k+ CPS Peak Proof" />
 </p>
 
-Most antibot plugins choke because they let bot traffic all the way into Minecraft before doing anything. ZAB drops bad connections the second they hit the socket so your server doesn't waste CPU or RAM decoding packets for them.
+Most antibot plugins let thousands of connections in before checking them, which lags or crashes the server. ZAB closes blocked connections immediately so your server doesn't waste CPU or RAM decoding packets for them.
 
 Runs on Minecraft 1.8 through 1.21+ (Java 8 to 21+).
 
