@@ -307,6 +307,7 @@ public final class NettyHook {
 
                 if (nextState == 1) {
                     zab.ping();
+                    zab.motd();
                 } else if (nextState == 2 || nextState == 3) {
                     zab.login();
                 }
