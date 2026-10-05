@@ -30,7 +30,7 @@ public final class NettyHook {
     private static final int MAX_BUFFER = 4096;
     private static final int WAIT = 0, PASS = 1, DROP = 2, RECONNECT = 3;
     private static final byte[] RECONNECT_KICK = loginDisconnect("{\"text\":\"\u00a7e\u00a7lZyre Anti Bot\\n\\n"
-            + "\u00a77Your connection is being verified.\\n\u00a7aPlease rejoin the server.\"}");
+            + "\u00a77Verifying connection\u2026\\n\u00a7aPlease reconnect to join.\"}");
 
     private final Zab zab;
     private final Acceptor acceptor = new Acceptor();

@@ -100,14 +100,14 @@ public final class Zab {
         }
     }
 
-    private final Rate cps = new Rate("Connections per second");
-    private final Rate ips = new Rate("IP addresses per second");
-    private final Rate logins = new Rate("Logins per second");
-    private final Rate pings = new Rate("Pings per second");
-    private final Rate motds = new Rate("MOTDs per second");
-    private final Rate handshakes = new Rate("Handshakes per second");
-    private final Rate blocked = new Rate("Blocked per second");
-    private final Rate bytes = new Rate("Bytes per second");
+    private final Rate cps = new Rate("CPS");
+    private final Rate ips = new Rate("IPSEC");
+    private final Rate logins = new Rate("Logins");
+    private final Rate pings = new Rate("Pings");
+    private final Rate motds = new Rate("MOTD");
+    private final Rate handshakes = new Rate("Handshakes");
+    private final Rate blocked = new Rate("Blocked");
+    private final Rate bytes = new Rate("Bytes");
     private final Rate[] shown = {cps, ips, logins, pings, motds, handshakes};
     private final Rate[] all = {cps, ips, logins, pings, motds, handshakes, blocked, bytes};
 
@@ -421,7 +421,7 @@ public final class Zab {
                 attack = on;
                 if (!on) {
                     pending.clear();
-                    emit("\u00a7aAttack has ended.");
+                    emit("\u00a7aAttack ended.");
                 } else if (blacklistOn && attackVerify) {
                     emit("\u00a7cUnder attack, new players must reconnect to verify.");
                 } else {
@@ -504,7 +504,7 @@ public final class Zab {
         if (attack) {
             sb.append(" \u00a78\u2022 \u00a74\u00a7lATTACK");
         } else if (cps.value == 0 && ips.value == 0) {
-            sb.append(" \u00a78\u2022 \u00a75Waiting for new attacks to arrive\u2026");
+            sb.append(" \u00a78\u2022 \u00a75Waiting for attacks\u2026");
         }
         return sb.toString();
     }
@@ -521,30 +521,30 @@ public final class Zab {
                 if (!arg.equals("on") && !arg.equals("off") && !arg.equals("barely") && !arg.equals("peak")) {
                     String cur = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
                     return Collections.singletonList(PREFIX + "\u00a77Blacklist is currently " + cur
-                            + "\u00a77. Use \u00a7f/zab blacklist <on|off|barely|peak>");
+                            + "\u00a77. Usage: \u00a7f/zab blacklist <on|off|barely|peak>");
                 }
                 if (arg.equals("peak")) {
                     blacklistOn = true;
                     barelyMode = false;
                     peakMode = true;
-                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7cpeak\u00a77. Fast micro-window peak analyzer enabled.");
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist set to \u00a7cpeak \u00a77(instant peak tracking on).");
                 }
                 if (arg.equals("barely")) {
                     blacklistOn = true;
                     barelyMode = true;
                     peakMode = false;
-                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings.");
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist set to \u00a7ebarely \u00a77(packet probing on).");
                 }
                 if (arg.equals("on")) {
                     blacklistOn = true;
                     barelyMode = false;
                     peakMode = false;
-                    return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7aon\u00a77. Standard high-burst mode (raw peak CPS).");
+                    return Collections.singletonList(PREFIX + "\u00a77Blacklist set to \u00a7aon\u00a77.");
                 }
                 blacklistOn = false;
                 barelyMode = false;
                 peakMode = false;
-                return Collections.singletonList(PREFIX + "\u00a77Blacklist is now \u00a7coff\u00a77. Connections will not be blocked.");
+                return Collections.singletonList(PREFIX + "\u00a77Blacklist set to \u00a7coff\u00a77.");
             case "barely":
                 if (arg.equals("on")) {
                     blacklistOn = true;
@@ -560,8 +560,8 @@ public final class Zab {
                     }
                 }
                 return Collections.singletonList(PREFIX + (barelyMode
-                        ? "\u00a77Blacklist is now \u00a7ebarely\u00a77. Probing packets before blocking to show raw handshakes/logins/pings."
-                        : "\u00a77Blacklist is now \u00a7aon\u00a77. Dropping bad connections instantly at accept for maximum CPS."));
+                        ? "\u00a77Barely mode \u00a7aenabled \u00a77(packet probing on)."
+                        : "\u00a77Barely mode \u00a7cdisabled\u00a77."));
             case "peak":
                 if (arg.equals("on")) {
                     peakMode = true;
@@ -571,15 +571,15 @@ public final class Zab {
                     peakMode = !peakMode;
                 }
                 return Collections.singletonList(PREFIX + (peakMode
-                        ? "\u00a77Peak mode is now \u00a7con\u00a77. Fast micro-window peak analyzer enabled."
-                        : "\u00a77Peak mode is now \u00a7coff\u00a77. Standard 1-second rolling window."));
+                        ? "\u00a77Peak mode \u00a7aenabled \u00a77(instant peak tracking on)."
+                        : "\u00a77Peak mode \u00a7cdisabled\u00a77."));
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
                     lines.add(PREFIX + "\u00a77" + r.label + ": " + color(r.value) + fmt(r.value)
                             + " \u00a78(\u00a77peak " + color(r.peak) + fmt(r.peak) + "\u00a78)");
                 }
-                lines.add(PREFIX + "\u00a77Blocked/s: " + color(blocked.value) + fmt(blocked.value)
+                lines.add(PREFIX + "\u00a77Blocked: " + color(blocked.value) + fmt(blocked.value)
                         + " \u00a78(\u00a77peak " + color(blocked.peak) + fmt(blocked.peak) + "\u00a78)");
                 lines.add(PREFIX + "\u00a77Bytes/s: " + color(bytes.value) + fmt(bytes.value));
                 String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
@@ -595,7 +595,7 @@ public final class Zab {
                         r.announced = 0;
                     }
                 });
-                return Collections.singletonList(PREFIX + "\u00a77Peaks have been reset.");
+                return Collections.singletonList(PREFIX + "\u00a77Traffic peaks reset.");
             case "unblock":
                 if (arg.isEmpty()) {
                     return Collections.singletonList(PREFIX + "\u00a77Usage: \u00a7f/zab unblock <ip>");
@@ -607,7 +607,7 @@ public final class Zab {
                     return Collections.singletonList(antiAfk.stop());
                 }
                 if (arg.equals("status")) {
-                    return Collections.singletonList(PREFIX + "\u00a77Anti-AFK bot status: " + antiAfk.status());
+                    return Collections.singletonList(PREFIX + "\u00a77Anti-AFK status: " + antiAfk.status());
                 }
                 int customPort = 0;
                 for (int i = 1; i < args.length; i++) {
@@ -633,12 +633,14 @@ public final class Zab {
                 return Collections.singletonList(antiAfk.toggle());
             default:
                 return Arrays.asList(
-                        PREFIX + "\u00a7f/zab verbose [top|down] \u00a78- \u00a77toggle the live counter",
-                        PREFIX + "\u00a7f/zab antiafk [on|off|status] [version] \u00a78- \u00a77keep server online with ZABAFK bot",
-                        PREFIX + "\u00a7f/zab blacklist <on|off|barely|peak> \u00a78- \u00a77toggle bot blocking (peak: fast micro-window peak detection)",
-                        PREFIX + "\u00a7f/zab stats \u00a78- \u00a77view current rates and peaks",
-                        PREFIX + "\u00a7f/zab reset \u00a78- \u00a77reset all peak records",
-                        PREFIX + "\u00a7f/zab unblock <ip> \u00a78- \u00a77unblock an IP address");
+                        PREFIX + "\u00a7f/zab verbose [top|down] \u00a78- \u00a77Toggle live HUD",
+                        PREFIX + "\u00a7f/zab blacklist <on|off|barely|peak> \u00a78- \u00a77Set blacklist mode",
+                        PREFIX + "\u00a7f/zab peak [on|off] \u00a78- \u00a77Toggle instant peak tracking",
+                        PREFIX + "\u00a7f/zab barely [on|off] \u00a78- \u00a77Toggle packet probing mode",
+                        PREFIX + "\u00a7f/zab antiafk [on|off|status] [version] \u00a78- \u00a77Manage Anti-AFK bot",
+                        PREFIX + "\u00a7f/zab stats \u00a78- \u00a77Show current rates and peaks",
+                        PREFIX + "\u00a7f/zab reset \u00a78- \u00a77Reset peak records",
+                        PREFIX + "\u00a7f/zab unblock <ip> \u00a78- \u00a77Unblock an IP address");
         }
     }
 

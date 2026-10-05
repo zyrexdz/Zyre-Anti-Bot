@@ -280,7 +280,7 @@ public final class ZabBungee extends Plugin implements Listener {
                 return;
             }
             if (!(sender instanceof ProxiedPlayer)) {
-                sender.sendMessage(TextComponent.fromLegacyText(Zab.PREFIX + "\u00a7cOnly in-game players can view the live counter."));
+                sender.sendMessage(TextComponent.fromLegacyText(Zab.PREFIX + "\u00a7cOnly players can use this command."));
                 return;
             }
             ProxiedPlayer p = (ProxiedPlayer) sender;
@@ -295,7 +295,7 @@ public final class ZabBungee extends Plugin implements Listener {
 
             String msg;
             if (top && bar != null) {
-                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the top counter.";
+                msg = "\u00a77Top HUD \u00a7cdisabled\u00a77.";
             } else if (top) {
                 bar = UUID.randomUUID();
                 BossBar add = new BossBar(bar, BAR_ADD);
@@ -305,12 +305,12 @@ public final class ZabBungee extends Plugin implements Listener {
                 add.setDivision(0);
                 p.unsafe().sendPacket(add);
                 viewersTop.put(id, bar);
-                msg = "\u00a77You are \u00a7anow \u00a77viewing the top counter.";
+                msg = "\u00a77Top HUD \u00a7aenabled\u00a77.";
             } else if (wasBottom) {
-                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the down counter.";
+                msg = "\u00a77Action bar HUD \u00a7cdisabled\u00a77.";
             } else {
                 viewersBottom.add(id);
-                msg = "\u00a77You are \u00a7anow \u00a77viewing the down counter.";
+                msg = "\u00a77Action bar HUD \u00a7aenabled\u00a77.";
             }
             p.sendMessage(TextComponent.fromLegacyText(Zab.PREFIX + msg));
         }

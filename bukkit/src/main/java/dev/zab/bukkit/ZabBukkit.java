@@ -309,7 +309,7 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length > 0 && args[0].equalsIgnoreCase("verbose")) {
             if (!(sender instanceof Player)) {
-                sender.sendMessage(Zab.PREFIX + "\u00a7cOnly in-game players can view the live counter.");
+                sender.sendMessage(Zab.PREFIX + "\u00a7cOnly players can use this command.");
                 return true;
             }
             Player p = (Player) sender;
@@ -327,7 +327,7 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
 
             String msg;
             if (top && wasTop) {
-                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the top counter.";
+                msg = "\u00a77Top HUD \u00a7cdisabled\u00a77.";
             } else if (top) {
                 if (topBossBar != null) {
                     try {
@@ -336,16 +336,16 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
                     } catch (Throwable ignored) {
                     }
                     viewersTop.add(id);
-                    msg = "\u00a77You are \u00a7anow \u00a77viewing the top counter.";
+                    msg = "\u00a77Top HUD \u00a7aenabled\u00a77.";
                 } else {
                     viewersBottom.add(id);
-                    msg = "\u00a7cTop BossBar requires Minecraft 1.9+. \u00a77Viewing \u00a7adown \u00a77counter instead.";
+                    msg = "\u00a7cTop BossBar requires 1.9+. \u00a77Showing \u00a7aaction bar \u00a77instead.";
                 }
             } else if (wasBottom) {
-                msg = "\u00a77You are \u00a7cno longer \u00a77viewing the down counter.";
+                msg = "\u00a77Action bar HUD \u00a7cdisabled\u00a77.";
             } else {
                 viewersBottom.add(id);
-                msg = "\u00a77You are \u00a7anow \u00a77viewing the down counter.";
+                msg = "\u00a77Action bar HUD \u00a7aenabled\u00a77.";
             }
             p.sendMessage(Zab.PREFIX + msg);
             return true;

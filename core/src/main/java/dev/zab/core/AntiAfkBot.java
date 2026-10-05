@@ -77,8 +77,8 @@ public final class AntiAfkBot {
         thread = new Thread(this::runLoop, "ZAB-AntiAFK");
         thread.setDaemon(true);
         thread.start();
-        return Zab.PREFIX + "\u00a7aStarted Anti-AFK bot \u00a7fZABAFK\u00a7a (" + protocolToVersion(targetProtocol)
-                + ") on port \u00a7f" + port + "\u00a7a! Connecting\u2026";
+        return Zab.PREFIX + "\u00a7aStarted Anti-AFK bot \u00a7fZABAFK \u00a77(" + protocolToVersion(targetProtocol)
+                + ") on port \u00a7f" + port + "\u00a7a.";
     }
 
     public synchronized String stop() {
@@ -96,7 +96,7 @@ public final class AntiAfkBot {
             thread.interrupt();
         }
         lastStatus = "\u00a7cOffline";
-        return Zab.PREFIX + "\u00a7cAnti-AFK bot \u00a7fZABAFK \u00a7chas been disconnected.";
+        return Zab.PREFIX + "\u00a7cAnti-AFK bot \u00a7fZABAFK \u00a7cstopped.";
     }
 
     public synchronized String toggle() {

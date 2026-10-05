@@ -1,91 +1,79 @@
 # Zyre Anti Bot (ZAB)
 
-*Inspired by Sonar Antibot.*
-
-A lightweight, high performance antibot and live connection monitor for **BungeeCord**, **Waterfall**, **Paper**, and **Spigot**.
+A Netty-level antibot and live traffic monitor for BungeeCord, Waterfall, Paper, and Spigot.
 
 <p align="center">
   <img src="assets/proof.png" alt="300k+ CPS Peak Proof" />
 </p>
 
-### Supported Versions & Software
-- **Minecraft Versions**: **1.8.8 up to 26.2+** (1.8 – 1.21.x, 26.1, 26.2, and future releases)
-- **Server Platforms**: Paper, Purpur, Spigot (1.8.8 to 26.2+)
-- **Proxy Platforms**: BungeeCord, Waterfall, FlameCord (1.8 to 26.2+)
-- **Java Runtimes**: Java 8 up to Java 21+
+Most antibot plugins struggle under heavy attacks because they let thousands of bot connections enter the proxy pipeline, wasting CPU decoding packets for IPs that should already be blocked. ZAB hooks directly into Netty's socket acceptor and drops blocked connections immediately with `closeForcibly()` before channel setup.
 
-Most antibots choke during real bot attacks because they let thousands of fake connections enter the proxy pipeline, wasting CPU decoding packets for IPs that should already be banned. ZAB hooks straight into Netty's socket acceptor and drops blocked connections on the spot—before your server or proxy even touches them.
-
-## Why ZAB?
-
-| | Standard Antibots | Sonar Antibot | Zyre Anti Bot (ZAB) |
-|---|---|---|---|
-| **Dropping bots** | Sends disconnect packet | Channel close | Instant TCP abort (`closeForcibly`) before channel setup |
-| **CPU on 10k CPS attack** | High (decodes all packets) | Moderate | Minimal (0 allocations for banned IPs) |
-| **Live HUD** | Chat spam or scoreboard | Action bar / BossBar | Real-time BossBar (`/zab verbose top`) or Action Bar (`/zab verbose down`) |
-| **Metrics** | Periodic averages | Live stats | Raw CPS, IPSEC, Logins, Pings, MOTD'S, Handshakes (50ms rolling window) |
-| **Built-in Bot** | None | None | Virtual Anti-AFK bot with auto protocol negotiation (`/zab antiafk`) |
+Supports Minecraft 1.8 through 1.21+ on Java 8 to 21+.
 
 ## Quickstart
 
 1. Download the jar for your server from [Releases](https://github.com/zyrexdz/Zyre-Anti-Bot/releases/latest):
    - **BungeeCord / Waterfall**: `ZAB-Bungee-1.0.0.jar`
    - **Paper / Spigot**: `ZAB-Bukkit-1.0.0.jar`
-2. Drop it into your `plugins/` folder and restart.
-3. In-game, run `/zab verbose top` for the top BossBar or `/zab verbose down` for the bottom Action Bar.
+2. Put the jar in your `plugins/` directory and restart.
+3. In-game, run `/zab verbose top` (BossBar) or `/zab verbose down` (Action Bar) to view live traffic.
 
 ## Commands
 
-All commands require the `zab.admin` permission (OP by default on Spigot).
+All commands require the `zab.admin` permission (defaults to OP on Spigot).
 
-- `/zab verbose [top|down]` - Toggle the real-time HUD on your screen.
-- `/zab blacklist <on|off|barely|peak>` - Turn bot blocking on (default high-burst mode for raw peak CPS), off, barely (probes packet metrics), or peak (fast micro-window analyzer to catch instant peaks before server crash).
-- `/zab barely [on|off]` - Shortcut to toggle packet-probing mode.
-- `/zab peak [on|off]` - Shortcut to toggle fast micro-window peak detection.
-- `/zab antiafk [on|off|status] [version]` - Keep your server awake with an internal bot named ZABAFK.
-- `/zab stats` - Show current rates and peak records in chat.
+- `/zab verbose [top|down]` - Toggle live traffic HUD (BossBar or Action Bar).
+- `/zab blacklist <on|off|barely|peak>` - Set blacklist mode:
+  - `on` - Drops blacklisted IPs instantly at socket accept.
+  - `peak` - Micro-window tracking to capture instant CPS spikes before crashes.
+  - `barely` - Probes packet headers before blocking (tracks handshakes/logins/pings).
+  - `off` - Disables blocking (monitor only).
+- `/zab peak [on|off]` - Toggle instant peak detection.
+- `/zab barely [on|off]` - Toggle packet probing mode.
+- `/zab antiafk [on|off|status] [version]` - Keep server alive with an internal client (`ZABAFK`).
+- `/zab stats` - Print current rates and peak records in chat.
 - `/zab reset` - Reset peak traffic records.
-- `/zab unblock <ip>` - Manually unban an IP.
+- `/zab unblock <ip>` - Manually unblock an IP.
 
 ## Config
 
-Generated automatically in `plugins/ZAB/config.yml`:
+Generated in `plugins/ZAB/config.yml`:
 
 ```yaml
-# Max connections a single IP can make per second
+# Max connections an IP can make per second before getting blocked
 max-connections-per-ip: 6
 
-# Ban duration in minutes
+# Block duration in minutes
 block-minutes: 5
 
-# CPS threshold that triggers attack mode
+# CPS threshold to trigger attack mode
 attack-cps: 40
 attack-end-seconds: 10
 
-# During attacks, new players get asked to rejoin once to verify
+# Require new players to reconnect once during attacks
 attack-verify: true
 
 # Minimum traffic peak to announce in chat
 min-peak: 3
 
-# Never block these (add your proxy IP if running on backend Spigot)
+# Whitelisted IPs (add your backend proxy IP if running on Spigot)
 trusted-ips:
   - 127.0.0.1
 
 # Anti-AFK bot settings
 antiafk-port: 0
 antiafk-version: "auto"
-antiafk-password: "" # Set your AuthMe password here if using a login plugin
+antiafk-password: "" # AuthMe password if applicable
 ```
 
 ## How It Works
 
-- **Zero-Allocation Drop**: When an IP exceeds the rate limit or sends garbage, it gets blacklisted. Future connections from that IP get aborted immediately at the TCP socket layer with `closeForcibly()`. No packet decoding, no logger spam, no memory wasted.
-- **Raw Metrics**: `CPS` and `IPSEC` track every single connection attempt before any blacklist logic runs. You always see the real attack volume hitting your box.
-- **Attack Verification**: When incoming traffic spikes past `attack-cps`, unverified players get disconnected with a rejoin prompt. Real players reconnect and get whitelisted into `verified.txt`; one-shot bot proxies drop off and never come back.
-- **Anti-AFK Bot**: Running on a host that stops your server when empty? `/zab antiafk on` logs in a local client directly over localhost to handle keep-alives, jump, and look around.
+- **TCP-Level Drop**: Blacklisted IPs are aborted immediately at the Netty socket level (`closeForcibly()`) without creating channel pipelines or decoding packets.
+- **Accurate Rates**: Tracks raw connection attempts (`CPS`) and unique IPs (`IPSEC`) before any filtering runs, so stats reflect actual incoming traffic.
+- **Rejoin Verification**: When traffic exceeds `attack-cps`, unverified connections are dropped with a reconnect prompt. Real players rejoin and get cached in `verified.txt`, while one-shot bot proxies are dropped.
+- **Anti-AFK Bot**: If your host shuts down empty servers, `/zab antiafk on` runs a lightweight local client on localhost that handles keep-alives and movement.
 
-## Building from Source
+## Building
 
 Requires Java 8+ and Maven.
 
@@ -97,12 +85,8 @@ build.bat
 mvn clean package
 ```
 
-Jars will be generated in `bungee/target/` and `bukkit/target/`.
+Built jars will be in `bungee/target/` and `bukkit/target/`.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-*If this saved your server from getting lagged out, leave a ⭐ to help others find it!*
+[MIT](LICENSE)
