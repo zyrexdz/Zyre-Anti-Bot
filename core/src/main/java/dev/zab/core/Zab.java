@@ -4,6 +4,7 @@ import io.netty.util.concurrent.FastThreadLocal;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -180,7 +181,61 @@ public final class Zab {
         lastSlideNanos = cachedNanos;
         attackUntil = cachedNanos;
         tuneKernelIfRoot();
+        optimizeFileDescriptorLimit();
         ticker.scheduleAtFixedRate(this::tick, 50, 50, TimeUnit.MILLISECONDS);
+    }
+
+    private void optimizeFileDescriptorLimit() {
+        if (!System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("linux")) {
+            return;
+        }
+        File limitsFile = new File("/proc/self/limits");
+        if (!limitsFile.exists()) {
+            return;
+        }
+        try {
+            String[] limits = readNoFileLimits(limitsFile);
+            if (limits == null) {
+                return;
+            }
+            String soft = limits[0];
+            String hard = limits[1];
+
+            if (!soft.equals(hard) && !"unlimited".equalsIgnoreCase(soft)) {
+                String pid = ManagementFactory.getRuntimeMXBean().getName().split("@")[0];
+                try {
+                    String target = "unlimited".equalsIgnoreCase(hard) ? "unlimited" : hard;
+                    Process p = new ProcessBuilder("prlimit", "--pid=" + pid, "--nofile=" + target + ":" + target)
+                            .redirectErrorStream(true)
+                            .start();
+                    if (p.waitFor(1, TimeUnit.SECONDS) && p.exitValue() == 0) {
+                        String[] updated = readNoFileLimits(limitsFile);
+                        if (updated != null) {
+                            log.accept("Raised Linux open file limit from " + soft + " to " + updated[0] + " (hard limit: " + hard + ").");
+                            return;
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            log.accept("Linux open file limit: " + soft + " (hard limit: " + hard + ").");
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String[] readNoFileLimits(File file) {
+        try {
+            for (String line : Files.readAllLines(file.toPath(), StandardCharsets.UTF_8)) {
+                if (line.startsWith("Max open files")) {
+                    String[] parts = line.substring("Max open files".length()).trim().split("\\s+");
+                    if (parts.length >= 2) {
+                        return new String[]{parts[0], parts[1]};
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private void tuneKernelIfRoot() {
