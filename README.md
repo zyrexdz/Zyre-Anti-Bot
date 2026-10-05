@@ -40,6 +40,9 @@ All commands require the `zab.admin` permission (defaults to OP on Spigot).
 Generated in `plugins/ZAB/config.yml`:
 
 ```yaml
+# Startup blacklist mode: on, peak, barely, or off
+blacklist-mode: "on"
+
 # Max connections an IP can make per second before getting blocked
 max-connections-per-ip: 6
 

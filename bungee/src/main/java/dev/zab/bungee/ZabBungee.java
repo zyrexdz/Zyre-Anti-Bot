@@ -93,6 +93,7 @@ public final class ZabBungee extends Plugin implements Listener {
                     }
                     return 25565;
                 });
+        zab.setMode(cfg.getString("blacklist-mode", cfg.getBoolean("peak-mode", false) ? "peak" : "on"));
         zab.start();
         zab.getAntiAfk().setPassword(cfg.getString("antiafk-password", ""));
         hook = new NettyHook(zab);

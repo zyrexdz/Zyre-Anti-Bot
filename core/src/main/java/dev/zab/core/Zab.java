@@ -265,6 +265,33 @@ public final class Zab {
         this.peakMode = peak;
     }
 
+    public void setMode(String mode) {
+        if (mode == null) return;
+        switch (mode.toLowerCase(Locale.ROOT)) {
+            case "peak":
+                blacklistOn = true;
+                barelyMode = false;
+                peakMode = true;
+                break;
+            case "barely":
+                blacklistOn = true;
+                barelyMode = true;
+                peakMode = false;
+                break;
+            case "off":
+                blacklistOn = false;
+                barelyMode = false;
+                peakMode = false;
+                break;
+            case "on":
+            default:
+                blacklistOn = true;
+                barelyMode = false;
+                peakMode = false;
+                break;
+        }
+    }
+
     public boolean connect(String ip) {
         ThreadCounters tc = tracked.get();
         tc.current[C_CPS]++;

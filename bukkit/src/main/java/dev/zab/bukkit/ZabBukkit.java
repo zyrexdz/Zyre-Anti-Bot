@@ -66,6 +66,7 @@ public final class ZabBukkit extends JavaPlugin implements Listener, TabExecutor
                     int p = getConfig().getInt("antiafk-port", 0);
                     return p > 0 ? p : getServer().getPort();
                 });
+        zab.setMode(getConfig().getString("blacklist-mode", getConfig().getBoolean("peak-mode", false) ? "peak" : "on"));
         zab.start();
         zab.getAntiAfk().setPassword(getConfig().getString("antiafk-password", ""));
         hook = new NettyHook(zab);

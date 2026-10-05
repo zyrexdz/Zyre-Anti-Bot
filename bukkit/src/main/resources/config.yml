@@ -1,5 +1,8 @@
 # Zyre Anti Bot (ZAB)
 
+# Startup blacklist mode: on (standard high-burst), peak (instant spike analyzer), barely, or off
+blacklist-mode: "on"
+
 # Connections a single IP can open per second before it gets blacklisted.
 max-connections-per-ip: 6
 # How long a blacklisted IP stays blocked.
