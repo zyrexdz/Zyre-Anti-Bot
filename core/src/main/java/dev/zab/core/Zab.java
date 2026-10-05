@@ -524,8 +524,8 @@ public final class Zab {
             for (Rate r : shown) {
                 long peak = r.peak;
                 if (peak > r.announced && peak >= minPeak) {
-                    emit(r.color + r.label + " \u00a77peak: " + r.color + fmt(r.announced)
-                            + " \u00a77\u2192 " + r.color + fmt(peak));
+                    emit(r.color + r.label + " \u00a77peak: " + color(r.announced) + fmt(r.announced)
+                            + " \u00a77\u2192 " + color(peak) + fmt(peak));
                     r.announced = peak;
                 }
             }
@@ -563,8 +563,16 @@ public final class Zab {
         return String.format(Locale.US, "%,d", n);
     }
 
+    private static String color(long n) {
+        if (n < 10) return "\u00a7a";
+        if (n < 100) return "\u00a7e";
+        if (n < 1000) return "\u00a76";
+        if (n < 10000) return "\u00a7c";
+        return "\u00a74";
+    }
+
     private static String stat(Rate r, String name) {
-        return r.color + name + ": " + r.color + fmt(r.value);
+        return r.color + name + ": " + color(r.value) + fmt(r.value);
     }
 
     private static String onOff(boolean on) {
@@ -657,12 +665,12 @@ public final class Zab {
             case "stats":
                 List<String> lines = new ArrayList<>();
                 for (Rate r : shown) {
-                    lines.add(PREFIX + r.color + r.label + ": " + r.color + fmt(r.value)
-                            + " \u00a78(\u00a77peak " + r.color + fmt(r.peak) + "\u00a78)");
+                    lines.add(PREFIX + r.color + r.label + ": " + color(r.value) + fmt(r.value)
+                            + " \u00a78(\u00a77peak " + color(r.peak) + fmt(r.peak) + "\u00a78)");
                 }
-                lines.add(PREFIX + "\u00a7cBlocked: \u00a7c" + fmt(blocked.value)
-                        + " \u00a78(\u00a77peak \u00a7c" + fmt(blocked.peak) + "\u00a78)");
-                lines.add(PREFIX + "\u00a77Bytes/s: \u00a77" + fmt(bytes.value));
+                lines.add(PREFIX + "\u00a7cBlocked: " + color(blocked.value) + fmt(blocked.value)
+                        + " \u00a78(\u00a77peak " + color(blocked.peak) + fmt(blocked.peak) + "\u00a78)");
+                lines.add(PREFIX + "\u00a77Bytes/s: " + color(bytes.value) + fmt(bytes.value));
                 String bl = !blacklistOn ? "\u00a7coff" : (barelyMode ? "\u00a7ebarely" : (peakMode ? "\u00a7cpeak" : "\u00a7aon"));
                 lines.add(PREFIX + "\u00a77Blacklist: " + bl
                         + " \u00a78| \u00a77Attack: " + (attack ? "\u00a7cyes" : "\u00a7ano")
