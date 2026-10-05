@@ -9,6 +9,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelOption;
 
 import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
@@ -47,6 +48,10 @@ public final class NettyHook {
         int added = 0;
         for (Object o : copy) {
             Channel ch = o instanceof ChannelFuture ? ((ChannelFuture) o).channel() : (Channel) o;
+            try {
+                ch.config().setOption(ChannelOption.SO_BACKLOG, 65535);
+            } catch (Throwable ignored) {
+            }
             if (ch.pipeline().get(ACCEPTOR) != null) {
                 continue;
             }
